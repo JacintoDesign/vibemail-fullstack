@@ -1,0 +1,42 @@
+{
+  "name": "vibemail-backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JacintoDesign/vibemail-backend.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/JacintoDesign/vibemail-backend/issues"
+  },
+  "homepage": "https://github.com/JacintoDesign/vibemail-backend#readme",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.106.1",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^25.9.1",
+    "googleapis": "^172.0.0",
+    "jsonwebtoken": "^9.0.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.3"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/supertest": "^7.2.0",
+    "jest": "^30.4.2",
+    "supertest": "^7.2.2",
+    "ts-jest": "^29.4.11",
+    "vercel": "^54.2.0"
+  }
+}
