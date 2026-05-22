@@ -14,9 +14,9 @@ Define the TypeScript interface that all email provider implementations must sat
 
 ## Unit 2 — Gmail OAuth Layer with Token Persistence
 
-Implement the Google OAuth 2.0 authorization flow: initiate, callback, token exchange, and token refresh. Persist access and refresh tokens to Supabase against the authenticated user row.
+Implement the Google OAuth 2.0 authorization flow: initiate, callback, token exchange, and token refresh. Persist access and refresh tokens to Supabase against the authenticated user row. The initiation step must call `generateAuthUrl` with `access_type: 'offline'` and `prompt: 'consent'` — without `access_type: 'offline'` Google does not issue a refresh token. Wire `oauth2Client.on('tokens', callback)` immediately after constructing the OAuth2 client; this event fires on every silent token refresh and the callback must upsert the new access token to Supabase, otherwise the stored token drifts.
 
-**Verify:** OAuth flow completes end-to-end, tokens are written to Supabase, and a forced token refresh returns a new access token without a mismatch error.
+**Verify:** OAuth flow completes end-to-end, both access and refresh tokens are written to Supabase, the `tokens` event fires during a forced refresh and the updated access token is persisted back to Supabase, and a subsequent Gmail API call after expiry succeeds without a token mismatch error.
 
 ---
 
