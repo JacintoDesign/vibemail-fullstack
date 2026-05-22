@@ -7,8 +7,12 @@
     "doc": "docs",
     "test": "tests"
   },
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "scripts": {
+    "db:push": "supabase db push",
+    "db:types": "supabase gen types typescript --linked > src/types/database.ts",
+    "build": "npx tsc",
+    "test": "jest --runInBand",
+    "dev": "ts-node src/index.ts"
   },
   "repository": {
     "type": "git",
