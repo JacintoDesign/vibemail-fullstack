@@ -154,6 +154,11 @@ All endpoints share:
 
 Receives the authorization code from Google, exchanges it for tokens, upserts the user in Supabase, issues a JWT, and redirects the browser to the frontend.
 
+> **OAuth initiation requirements (applies to the handler that generates the Google consent URL):**
+> - `generateAuthUrl` must be called with `access_type: 'offline'` — without this Google does not issue a refresh token and the session becomes unrecoverable once the access token expires.
+> - Include `prompt: 'consent'` to force the consent screen even for returning users, ensuring a fresh refresh token is always returned.
+> - Wire `oauth2Client.on('tokens', callback)` immediately after constructing the OAuth2 client. This event fires every time the client silently refreshes an access token; the callback must upsert the new access token to Supabase. Without this listener the stored token drifts and eventually all Gmail API calls fail.
+
 #### Request
 
 ```
@@ -321,4 +326,4 @@ Body:
 
 ---
 
-*Last updated: 2026-05-17*
+*Last updated: 2026-05-22*
