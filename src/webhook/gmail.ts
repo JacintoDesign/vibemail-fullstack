@@ -190,8 +190,14 @@ export async function processGmailNotification(
     return;
   }
 
-  const payload  = rawBody as PubSubPayload;
-  const notification = decodePubSubData(payload.message.data);
+  const payload = rawBody as PubSubPayload;
+  let notification: GmailNotification;
+  try {
+    notification = decodePubSubData(payload.message.data);
+  } catch (err) {
+    console.error('[webhook:gmail] Rejected: failed to decode PubSub data', err);
+    return;
+  }
   const { emailAddress, historyId } = notification;
   const newHistoryId = String(historyId);
 
