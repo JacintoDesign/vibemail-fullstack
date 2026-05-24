@@ -1,4 +1,10 @@
 {
   "installCommand": "npm install",
-  "buildCommand": ""
+  "buildCommand": "",
+  "crons": [
+    {
+      "path": "/api/cron/renew-watch",
+      "schedule": "0 6 * * *"
+    }
+  ]
 }
