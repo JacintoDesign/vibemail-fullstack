@@ -243,7 +243,7 @@ export async function initiateOAuth(): Promise<{ url: string; state: string }> {
 export async function exchangeCode(
   code: string,
   _state?: string,
-): Promise<OAuthTokens & { userId: string; email: string }> {
+): Promise<OAuthTokens & { userId: string; email: string; name: string }> {
   const client = createOAuth2Client();
 
   let rawTokens: {
@@ -300,7 +300,7 @@ export async function exchangeCode(
   attachTokensListener(client, userId);
   await setupWatch(client, userId);
 
-  return { ...tokens, userId, email: profile.email };
+  return { ...tokens, userId, email: profile.email, name: profile.name ?? profile.email };
 }
 
 /**

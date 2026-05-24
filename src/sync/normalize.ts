@@ -131,6 +131,48 @@ export function toRow(
   };
 }
 
+// ── DB row → Message ─────────────────────────────────────────────────────────
+
+export interface DbMessageRow {
+  id:           string;
+  user_id:      string;
+  gmail_id:     string;
+  thread_id:    string;
+  label_ids:    string[];
+  from_address: string;
+  to_address:   string;
+  subject:      string;
+  date:         string;
+  snippet:      string;
+  body_plain:   string | null;
+  body_html:    string | null;
+  is_read:      boolean;
+  is_starred:   boolean;
+  created_at:   string;
+  updated_at:   string;
+}
+
+export function rowToMessage(row: DbMessageRow): Message {
+  return {
+    id:         row.id,
+    userId:     row.user_id,
+    createdAt:  row.created_at,
+    updatedAt:  row.updated_at,
+    gmailId:    row.gmail_id,
+    threadId:   row.thread_id,
+    labelIds:   row.label_ids,
+    from:       row.from_address,
+    to:         row.to_address,
+    subject:    row.subject,
+    date:       row.date,
+    snippet:    row.snippet,
+    bodyPlain:  row.body_plain,
+    bodyHtml:   row.body_html,
+    isRead:     row.is_read,
+    isStarred:  row.is_starred,
+  };
+}
+
 // ── Upsert ───────────────────────────────────────────────────────────────────
 
 export async function upsertMessages(
