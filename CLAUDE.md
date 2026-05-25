@@ -95,4 +95,5 @@ All required variables are in `.env.example`. The non-obvious ones:
 | `GOOGLE_PUBSUB_TOPIC` | Full Pub/Sub topic name for Gmail push notifications |
 | `GOOGLE_PUBSUB_VERIFICATION_TOKEN` | Shared secret to validate inbound Pub/Sub push payloads |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service-role key — bypasses RLS; server-only |
+| `ENCRYPTION_KEY` | 64-char hex string (32 bytes) — AES-256-GCM key for encrypting OAuth tokens at rest |
 | `FRONTEND_URL` | OAuth callback redirects here after issuing the JWT |

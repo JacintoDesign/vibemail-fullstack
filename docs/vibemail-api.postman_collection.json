@@ -1,0 +1,999 @@
+{
+  "info": {
+    "_postman_id": "a3f9d21b-0c47-4e8a-b165-7e2f3a9c0d4b",
+    "name": "VibeMail API",
+    "description": "Complete request coverage for the VibeMail backend API (CONTRACT.md §4).\n\n## Collection variables\n\n| Variable | Default | Description |\n|---|---|---|\n| `baseUrl` | `http://localhost:3000` | Switch to your Vercel deployment URL for production testing |\n| `jwt` | *(empty)* | JWT issued by the OAuth callback. After completing the Google OAuth flow, copy the `token=` param from the redirect URL and paste it here. |\n| `messageId` | `replace_with_real_gmail_message_id` | A real Gmail message ID (from `messages[].gmailId` in a list response) — used by the PATCH endpoint requests. |\n\nEach folder contains one happy-path request and one request per named error code from CONTRACT.md §4.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string",
+      "description": "Base URL. Change to your Vercel deployment URL (e.g. https://vibemail-backend.vercel.app) for production testing."
+    },
+    {
+      "key": "jwt",
+      "value": "",
+      "type": "string",
+      "description": "JWT issued by GET /api/v1/auth/google/callback. Complete the OAuth flow and copy the ?token= value from the redirect URL."
+    },
+    {
+      "key": "messageId",
+      "value": "replace_with_real_gmail_message_id",
+      "type": "string",
+      "description": "A valid Gmail message ID from messages[].gmailId in a GET /api/v1/messages response. Required for PATCH /api/v1/messages/:id requests."
+    }
+  ],
+  "item": [
+    {
+      "name": "4.1 OAuth Callback",
+      "description": "GET /api/v1/auth/google/callback\n\nReceives the authorization code from Google, exchanges it for OAuth tokens, upserts the user in Supabase, issues a JWT, and redirects the browser to FRONTEND_URL/auth/callback?token=<jwt>.\n\nThis endpoint is unauthenticated — no Bearer token required.",
+      "item": [
+        {
+          "id": "01000001-0000-0000-0000-000000000001",
+          "name": "Happy path — authorization code received",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/google/callback?code=4%2F0AX4XfWi_REPLACE_WITH_REAL_CODE&state=csrf_state_token",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "google", "callback"],
+              "query": [
+                {
+                  "key": "code",
+                  "value": "4%2F0AX4XfWi_REPLACE_WITH_REAL_CODE",
+                  "description": "Authorization code returned by Google. Obtain a real code by visiting GET /api/v1/auth/google/initiate (or constructing the Google consent URL manually)."
+                },
+                {
+                  "key": "state",
+                  "value": "csrf_state_token",
+                  "description": "Opaque CSRF token (optional). Must match the value generated during OAuth initiation."
+                }
+              ]
+            },
+            "description": "Simulates Google redirecting back to the callback URL after the user approves the OAuth consent screen.\n\nExpected response: **302 Found** — Location header set to `FRONTEND_URL/auth/callback?token=<jwt>`\n\nThe JWT payload contains: `{ sub, email, name, exp }` (HS256, 7-day expiry). Copy the `token=` param from the Location header and store it in the `jwt` collection variable."
+          }
+        },
+        {
+          "id": "01000001-0000-0000-0000-000000000002",
+          "name": "MISSING_CODE — no code query param",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/google/callback",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "google", "callback"]
+            },
+            "description": "Omits the required `code` query parameter.\n\nExpected response: **400 Bad Request**\n```json\n{ \"error\": { \"code\": \"MISSING_CODE\", \"message\": \"Required query parameter \\\"code\\\" is absent\" } }\n```"
+          }
+        },
+        {
+          "id": "01000001-0000-0000-0000-000000000003",
+          "name": "OAUTH_DENIED — user clicked Deny",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/google/callback?error=access_denied",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "google", "callback"],
+              "query": [
+                {
+                  "key": "error",
+                  "value": "access_denied",
+                  "description": "Sent by Google when the user clicks the Deny button on the consent screen."
+                }
+              ]
+            },
+            "description": "Google sends `error=access_denied` when the user denies the OAuth consent request.\n\nExpected response: **400 Bad Request**\n```json\n{ \"error\": { \"code\": \"OAUTH_DENIED\", \"message\": \"User denied the OAuth consent request\" } }\n```"
+          }
+        },
+        {
+          "id": "01000001-0000-0000-0000-000000000004",
+          "name": "TOKEN_EXCHANGE_FAILED — invalid or expired code",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/google/callback?code=this_code_is_expired_or_invalid",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "google", "callback"],
+              "query": [
+                {
+                  "key": "code",
+                  "value": "this_code_is_expired_or_invalid",
+                  "description": "An obviously invalid authorization code. Google will reject the token exchange with a 4xx error."
+                }
+              ]
+            },
+            "description": "Sends a malformed / expired authorization code. The POST to `https://oauth2.googleapis.com/token` will return a non-2xx, causing the token exchange to fail.\n\nExpected response: **502 Bad Gateway**\n```json\n{ \"error\": { \"code\": \"TOKEN_EXCHANGE_FAILED\", \"message\": \"OAuth token exchange failed\" } }\n```"
+          }
+        },
+        {
+          "id": "01000001-0000-0000-0000-000000000005",
+          "name": "GMAIL_UNAVAILABLE — Google API unreachable",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/google/callback?code=4%2F0AX4XfWi_REPLACE_WITH_REAL_CODE",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "google", "callback"],
+              "query": [
+                {
+                  "key": "code",
+                  "value": "4%2F0AX4XfWi_REPLACE_WITH_REAL_CODE",
+                  "description": "Real authorization code. The 503 fires when Google's network is unreachable (ECONNABORTED / ETIMEDOUT / ENOTFOUND), not on a bad code."
+                }
+              ]
+            },
+            "description": "Triggered when the server cannot reach Google APIs (network timeout — ECONNABORTED, ETIMEDOUT, or ENOTFOUND). Reproduce in a controlled environment by blocking outbound traffic to `*.googleapis.com` on the server.\n\nExpected response: **503 Service Unavailable**\n```json\n{ \"error\": { \"code\": \"GMAIL_UNAVAILABLE\", \"message\": \"Timed out reaching Google APIs\" } }\n```"
+          }
+        }
+      ]
+    },
+    {
+      "name": "4.2 Message List",
+      "description": "GET /api/v1/messages\n\nReturns a cursor-paginated page of messages stored in Supabase for the authenticated user, newest-first.\n\nRequires `Authorization: Bearer {{jwt}}`.",
+      "item": [
+        {
+          "id": "02000001-0000-0000-0000-000000000001",
+          "name": "Happy path — first page, default limit",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}",
+                "description": "JWT issued by the OAuth callback."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "messages"]
+            },
+            "description": "Fetches the first page of messages with default limit (20), no label filter, no cursor.\n\nExpected response: **200 OK**\n```json\n{\n  \"messages\": [ /* Message[] ordered newest-first */ ],\n  \"nextCursor\": \"base64EncodedCursor or null\"\n}\n```\nIf `nextCursor` is non-null, pass it as the `cursor` query param on the next request."
+          }
+        },
+        {
+          "id": "02000001-0000-0000-0000-000000000002",
+          "name": "Happy path — second page with cursor",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages?cursor=REPLACE_WITH_NEXT_CURSOR&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "messages"],
+              "query": [
+                {
+                  "key": "cursor",
+                  "value": "REPLACE_WITH_NEXT_CURSOR",
+                  "description": "Base64-encoded cursor returned as `nextCursor` in the previous page response."
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Fetches the next page by passing the `nextCursor` from the previous response.\n\nExpected response: **200 OK** — same shape as the first page. `nextCursor` will be `null` when the last page is reached."
+          }
+        },
+        {
+          "id": "02000001-0000-0000-0000-000000000003",
+          "name": "Happy path — filter by INBOX label",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages?labelId=INBOX&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "messages"],
+              "query": [
+                {
+                  "key": "labelId",
+                  "value": "INBOX",
+                  "description": "Gmail label ID to filter by. Other common values: SENT, STARRED, UNREAD, SPAM, TRASH."
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Fetches messages that carry the `INBOX` label. Any Gmail label ID is accepted (INBOX, SENT, STARRED, UNREAD, SPAM, TRASH, or custom label IDs).\n\nExpected response: **200 OK** — same shape, filtered to messages whose `labelIds` array contains `\"INBOX\"`."
+          }
+        },
+        {
+          "id": "02000001-0000-0000-0000-000000000004",
+          "name": "UNAUTHORIZED — missing Authorization header",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "messages"]
+            },
+            "description": "Sends no `Authorization` header.\n\nExpected response: **401 Unauthorized**\n```json\n{ \"error\": { \"code\": \"UNAUTHORIZED\", \"message\": \"...\" } }\n```\nThe same 401 is returned for a malformed token, an expired token, or a signature mismatch."
+          }
+        },
+        {
+          "id": "02000001-0000-0000-0000-000000000005",
+          "name": "UNAUTHORIZED — malformed JWT",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer not.a.valid.jwt",
+                "description": "A syntactically invalid JWT — will fail signature verification."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "messages"]
+            },
+            "description": "Sends a malformed JWT string that cannot be parsed or verified.\n\nExpected response: **401 Unauthorized**\n```json\n{ \"error\": { \"code\": \"UNAUTHORIZED\", \"message\": \"...\" } }\n```"
+          }
+        },
+        {
+          "id": "02000001-0000-0000-0000-000000000006",
+          "name": "INVALID_LIMIT — limit exceeds maximum (101)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages?limit=101",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "messages"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "101",
+                  "description": "One above the maximum allowed value (100)."
+                }
+              ]
+            },
+            "description": "Sends `limit=101` which exceeds the maximum of 100.\n\nExpected response: **422 Unprocessable Entity**\n```json\n{ \"error\": { \"code\": \"INVALID_LIMIT\", \"message\": \"limit must be an integer between 1 and 100\" } }\n```\nAlso triggered by `limit=0` (below minimum of 1) or a non-numeric value like `limit=abc`."
+          }
+        },
+        {
+          "id": "02000001-0000-0000-0000-000000000007",
+          "name": "INVALID_LIMIT — non-numeric value",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages?limit=abc",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "messages"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "abc",
+                  "description": "Non-numeric string — NaN after Number() conversion."
+                }
+              ]
+            },
+            "description": "Sends `limit=abc`, which is not a valid integer.\n\nExpected response: **422 Unprocessable Entity**\n```json\n{ \"error\": { \"code\": \"INVALID_LIMIT\", \"message\": \"limit must be an integer between 1 and 100\" } }\n```"
+          }
+        },
+        {
+          "id": "02000001-0000-0000-0000-000000000008",
+          "name": "SCOPE_MISSING — token lacks gmail.modify scope",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "messages"]
+            },
+            "description": "**Server-side condition** — triggered when the stored Google OAuth token was issued without the `https://www.googleapis.com/auth/gmail.modify` scope. Reproduce by authenticating with a deliberately scope-limited token.\n\nExpected response: **403 Forbidden**\n```json\n{ \"error\": { \"code\": \"SCOPE_MISSING\", \"message\": \"...\" } }\n```"
+          }
+        },
+        {
+          "id": "02000001-0000-0000-0000-000000000009",
+          "name": "GMAIL_RATE_LIMITED — Gmail API 429",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "messages"]
+            },
+            "description": "**Server-side condition** — triggered when Gmail API responds with HTTP 429. Reproduce by exhausting Gmail API quota in the Google Cloud Console or by running many requests in rapid succession.\n\nExpected response: **429 Too Many Requests**\n```json\n{ \"error\": { \"code\": \"GMAIL_RATE_LIMITED\", \"message\": \"...\" } }\n```"
+          }
+        },
+        {
+          "id": "02000001-0000-0000-0000-000000000010",
+          "name": "GMAIL_LIST_FAILED — Gmail API non-2xx",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "messages"]
+            },
+            "description": "**Server-side condition** — triggered when Gmail API returns any non-2xx status other than 429 (e.g., 500, 503 from Google). Reproduce by revoking the user's OAuth token in the Google Account security settings and then making a request before the server detects the revocation.\n\nExpected response: **502 Bad Gateway**\n```json\n{ \"error\": { \"code\": \"GMAIL_LIST_FAILED\", \"message\": \"...\" } }\n```"
+          }
+        }
+      ]
+    },
+    {
+      "name": "4.3 Message Send",
+      "description": "POST /api/v1/messages\n\nComposes and sends an email via the Gmail API, then persists the sent message in Supabase. Supports new composition and threaded replies.\n\nRequires `Authorization: Bearer {{jwt}}`.",
+      "item": [
+        {
+          "id": "03000001-0000-0000-0000-000000000001",
+          "name": "Happy path — compose new message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"recipient@example.com\",\n  \"subject\": \"Hello from VibeMail\",\n  \"body\": \"This is a test message sent via the VibeMail API.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "messages"]
+            },
+            "description": "Sends a new email to the specified recipient.\n\nExpected response: **201 Created**\n```json\n{\n  \"message\": { /* full Message object as stored in Supabase */ }\n}\n```"
+          }
+        },
+        {
+          "id": "03000001-0000-0000-0000-000000000002",
+          "name": "Happy path — threaded reply",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"recipient@example.com\",\n  \"subject\": \"Re: Hello from VibeMail\",\n  \"body\": \"Replying in-thread via the VibeMail API.\",\n  \"threadId\": \"REPLACE_WITH_REAL_THREAD_ID\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "messages"]
+            },
+            "description": "Sends a reply in an existing Gmail thread by including `threadId`. Get a real thread ID from `messages[].threadId` in a list response.\n\nExpected response: **201 Created** — same `{ message: Message }` shape. The returned `message.threadId` will match the `threadId` sent."
+          }
+        },
+        {
+          "id": "03000001-0000-0000-0000-000000000003",
+          "name": "MISSING_FIELDS — body missing required field (to)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subject\": \"Hello from VibeMail\",\n  \"body\": \"This message is missing the required 'to' field.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "messages"]
+            },
+            "description": "Omits the required `to` field. The same error fires if `subject` or `body` is absent, or if any of the three is an empty string.\n\nExpected response: **400 Bad Request**\n```json\n{ \"error\": { \"code\": \"MISSING_FIELDS\", \"message\": \"Request body must include to, subject, and body\" } }\n```"
+          }
+        },
+        {
+          "id": "03000001-0000-0000-0000-000000000004",
+          "name": "MISSING_FIELDS — empty string value",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"recipient@example.com\",\n  \"subject\": \"\",\n  \"body\": \"Subject is an empty string.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "messages"]
+            },
+            "description": "Sends `subject` as an empty string. Fields that are present but empty are treated as missing.\n\nExpected response: **400 Bad Request**\n```json\n{ \"error\": { \"code\": \"MISSING_FIELDS\", \"message\": \"to, subject, and body must not be empty strings\" } }\n```"
+          }
+        },
+        {
+          "id": "03000001-0000-0000-0000-000000000005",
+          "name": "INVALID_RECIPIENT — malformed email address",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"not-a-valid-email\",\n  \"subject\": \"Test\",\n  \"body\": \"Recipient address fails RFC 5321 validation.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "messages"]
+            },
+            "description": "Sends `to` as a string that fails RFC 5321 email validation (no `@` domain part).\n\nExpected response: **400 Bad Request**\n```json\n{ \"error\": { \"code\": \"INVALID_RECIPIENT\", \"message\": \"to must be a valid email address\" } }\n```"
+          }
+        },
+        {
+          "id": "03000001-0000-0000-0000-000000000006",
+          "name": "UNAUTHORIZED — missing Authorization header",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"recipient@example.com\",\n  \"subject\": \"Test\",\n  \"body\": \"No JWT provided.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "messages"]
+            },
+            "description": "Sends a valid body but omits the `Authorization` header.\n\nExpected response: **401 Unauthorized**\n```json\n{ \"error\": { \"code\": \"UNAUTHORIZED\", \"message\": \"...\" } }\n```"
+          }
+        },
+        {
+          "id": "03000001-0000-0000-0000-000000000007",
+          "name": "THREAD_NOT_FOUND — non-existent threadId",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"recipient@example.com\",\n  \"subject\": \"Re: Ghost Thread\",\n  \"body\": \"Replying to a thread that does not exist.\",\n  \"threadId\": \"nonexistent_thread_id_000000000\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "messages"]
+            },
+            "description": "Provides a `threadId` that does not exist in Gmail. Gmail API returns 404, which the server maps to this error.\n\nExpected response: **404 Not Found**\n```json\n{ \"error\": { \"code\": \"THREAD_NOT_FOUND\", \"message\": \"...\" } }\n```"
+          }
+        },
+        {
+          "id": "03000001-0000-0000-0000-000000000008",
+          "name": "GMAIL_RATE_LIMITED — Gmail API 429",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"recipient@example.com\",\n  \"subject\": \"Rate limit test\",\n  \"body\": \"Triggered when Gmail API quota is exhausted.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "messages"]
+            },
+            "description": "**Server-side condition** — triggered when the Gmail `messages.send` API responds with 429. Reproduce by exhausting Gmail send quota.\n\nExpected response: **429 Too Many Requests**\n```json\n{ \"error\": { \"code\": \"GMAIL_RATE_LIMITED\", \"message\": \"...\" } }\n```"
+          }
+        },
+        {
+          "id": "03000001-0000-0000-0000-000000000009",
+          "name": "GMAIL_SEND_FAILED — Gmail API non-2xx",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"recipient@example.com\",\n  \"subject\": \"Send failure test\",\n  \"body\": \"Triggered when Gmail messages.send returns a non-2xx other than 429.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "messages"]
+            },
+            "description": "**Server-side condition** — triggered when Gmail `messages.send` returns any non-2xx status other than 429 (e.g., 500 from Google). Reproduce by revoking the OAuth token or using a token with expired credentials.\n\nExpected response: **502 Bad Gateway**\n```json\n{ \"error\": { \"code\": \"GMAIL_SEND_FAILED\", \"message\": \"...\" } }\n```"
+          }
+        }
+      ]
+    },
+    {
+      "name": "4.4 Mark as Read",
+      "description": "PATCH /api/v1/messages/:id\n\nModifies the `UNREAD` Gmail label and updates `isRead` in Supabase. Bidirectional: pass `read: true` to mark read, `read: false` to mark unread.\n\nRequires `Authorization: Bearer {{jwt}}`. Set the `messageId` collection variable to a real Gmail message ID before running these requests.",
+      "item": [
+        {
+          "id": "04000001-0000-0000-0000-000000000001",
+          "name": "Happy path — mark as read",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"read\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "messages", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}",
+                  "description": "Gmail message ID. Set the `messageId` collection variable to a real value from a list response."
+                }
+              ]
+            },
+            "description": "Removes the `UNREAD` label from the Gmail message and sets `is_read = true` in Supabase. The message must currently be unread — if it is already read, the server returns 409 ALREADY_IN_STATE.\n\nExpected response: **200 OK**\n```json\n{\n  \"message\": {\n    \"id\": \"<gmailMessageId>\",\n    \"isRead\": true\n  }\n}\n```"
+          }
+        },
+        {
+          "id": "04000001-0000-0000-0000-000000000002",
+          "name": "Happy path — mark as unread",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"read\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "messages", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}",
+                  "description": "Gmail message ID — must currently be marked as read."
+                }
+              ]
+            },
+            "description": "Adds the `UNREAD` label to the Gmail message and sets `is_read = false` in Supabase. The message must currently be read — if it is already unread, the server returns 409 ALREADY_IN_STATE.\n\nExpected response: **200 OK**\n```json\n{\n  \"message\": {\n    \"id\": \"<gmailMessageId>\",\n    \"isRead\": false\n  }\n}\n```"
+          }
+        },
+        {
+          "id": "04000001-0000-0000-0000-000000000003",
+          "name": "INVALID_BODY — read field absent",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "messages", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}"
+                }
+              ]
+            },
+            "description": "Sends an empty body — `read` field is absent.\n\nExpected response: **400 Bad Request**\n```json\n{ \"error\": { \"code\": \"INVALID_BODY\", \"message\": \"\\\"read\\\" field is required and must be a boolean\" } }\n```\nAlso triggered by `read: null` or `read: \"true\"` (string instead of boolean)."
+          }
+        },
+        {
+          "id": "04000001-0000-0000-0000-000000000004",
+          "name": "INVALID_BODY — read is a string, not boolean",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"read\": \"true\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "messages", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}"
+                }
+              ]
+            },
+            "description": "Sends `read` as a JSON string `\"true\"` instead of a boolean `true`. The type check (`typeof read !== 'boolean'`) rejects it.\n\nExpected response: **400 Bad Request**\n```json\n{ \"error\": { \"code\": \"INVALID_BODY\", \"message\": \"\\\"read\\\" field is required and must be a boolean\" } }\n```"
+          }
+        },
+        {
+          "id": "04000001-0000-0000-0000-000000000005",
+          "name": "UNAUTHORIZED — missing Authorization header",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"read\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "messages", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}"
+                }
+              ]
+            },
+            "description": "Sends a valid body but omits the `Authorization` header.\n\nExpected response: **401 Unauthorized**\n```json\n{ \"error\": { \"code\": \"UNAUTHORIZED\", \"message\": \"...\" } }\n```"
+          }
+        },
+        {
+          "id": "04000001-0000-0000-0000-000000000006",
+          "name": "MESSAGE_NOT_FOUND — non-existent message ID",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"read\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/nonexistent_message_id_000",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "messages", "nonexistent_message_id_000"]
+            },
+            "description": "Uses a hard-coded path ID that does not exist in Supabase for the authenticated user. The Supabase lookup returns no row.\n\nExpected response: **404 Not Found**\n```json\n{ \"error\": { \"code\": \"MESSAGE_NOT_FOUND\", \"message\": \"No message with id \\\"nonexistent_message_id_000\\\" found for this user\" } }\n```"
+          }
+        },
+        {
+          "id": "04000001-0000-0000-0000-000000000007",
+          "name": "ALREADY_IN_STATE — message already has requested read state",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"read\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "messages", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}",
+                  "description": "Use a message that is already marked as read (isRead: true). To reliably reproduce: run the 'mark as read' happy path first, then run this request immediately after without changing the messageId."
+                }
+              ]
+            },
+            "description": "Sends `read: true` for a message that is already marked as read. To reproduce reliably: run the **Happy path — mark as read** request first, then run this request with the same `messageId`.\n\nExpected response: **409 Conflict**\n```json\n{ \"error\": { \"code\": \"ALREADY_IN_STATE\", \"message\": \"Message is already marked as read\" } }\n```"
+          }
+        },
+        {
+          "id": "04000001-0000-0000-0000-000000000008",
+          "name": "GMAIL_RATE_LIMITED — Gmail API 429",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"read\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "messages", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}"
+                }
+              ]
+            },
+            "description": "**Server-side condition** — triggered when the Gmail `messages.modify` API responds with 429. Reproduce by exhausting Gmail API quota.\n\nExpected response: **429 Too Many Requests**\n```json\n{ \"error\": { \"code\": \"GMAIL_RATE_LIMITED\", \"message\": \"...\" } }\n```"
+          }
+        },
+        {
+          "id": "04000001-0000-0000-0000-000000000009",
+          "name": "GMAIL_MODIFY_FAILED — Gmail API non-2xx",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"read\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "messages", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}"
+                }
+              ]
+            },
+            "description": "**Server-side condition** — triggered when Gmail `messages.modify` returns any non-2xx status other than 429. Reproduce by revoking the stored OAuth token in Google Account security settings.\n\nExpected response: **502 Bad Gateway**\n```json\n{ \"error\": { \"code\": \"GMAIL_MODIFY_FAILED\", \"message\": \"Gmail label modification failed\" } }\n```"
+          }
+        }
+      ]
+    }
+  ]
+}

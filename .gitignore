@@ -2,4 +2,5 @@
 node_modules
 dist/
 .vercel/
-EOF
+.vercel
+supabase/.temp/
