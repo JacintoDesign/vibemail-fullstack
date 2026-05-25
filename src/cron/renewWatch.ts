@@ -1,24 +1,10 @@
 import { google } from 'googleapis';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { loadOAuth2Client } from '../providers/gmail/auth';
 import { ProviderError } from '../types/provider';
+import { getClient, updateHistoryId, updateWatchExpiry } from '../db';
 
 // Renew any watch whose expiry falls within the next 24 hours (or has already lapsed).
 const RENEWAL_WINDOW_MS = 24 * 60 * 60 * 1000;
-
-// ── Supabase ─────────────────────────────────────────────────────────────────
-
-function getSupabase(): SupabaseClient {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) {
-    throw new ProviderError(
-      'CONFIG_ERROR',
-      'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set',
-    );
-  }
-  return createClient(url, key);
-}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -52,11 +38,10 @@ export async function renewExpiringWatches(): Promise<RenewalResult> {
     throw new ProviderError('CONFIG_ERROR', 'GOOGLE_PUBSUB_TOPIC env var is not set');
   }
 
-  const supabase  = getSupabase();
   const threshold = Date.now() + RENEWAL_WINDOW_MS;
 
   // ── Fetch users with expiring or lapsed watches ───────────────────────────
-  const { data, error } = await supabase
+  const { data, error } = await getClient()
     .from('users')
     .select('id, watch_expiry')
     .not('watch_expiry', 'is', null)
@@ -93,19 +78,12 @@ export async function renewExpiringWatches(): Promise<RenewalResult> {
         requestBody: { topicName },
       });
 
-      const { error: updateError } = await supabase
-        .from('users')
-        .update({
-          watch_expiry:      watchData.expiration ? Number(watchData.expiration) : null,
-          history_id:        watchData.historyId  ?? null,
-          // Reset to null — the webhook receiver captures the new resource ID
-          // from the X-Goog-Resource-ID Pub/Sub push header on first delivery.
-          watch_resource_id: null,
-        })
-        .eq('id', user.id);
-
-      if (updateError) {
-        throw new ProviderError('WATCH_RENEWAL_FAILED', updateError.message, updateError);
+      const expiry = watchData.expiration ? Number(watchData.expiration) : null;
+      // Reset watch_resource_id to null — the webhook receiver captures the
+      // new resource ID from the X-Goog-Resource-ID header on first delivery.
+      await updateWatchExpiry(user.id, expiry, null);
+      if (watchData.historyId) {
+        await updateHistoryId(user.id, watchData.historyId);
       }
 
       console.log(

@@ -1,27 +1,9 @@
 import { google } from 'googleapis';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { loadOAuth2Client } from '../providers/gmail/auth';
 import { Message } from '../types/message';
 import { ProviderError } from '../types/provider';
 import { normalizeMessage, upsertMessages } from '../sync/normalize';
-
-// ── Supabase (lazy singleton) ────────────────────────────────────────────────
-
-let _supabase: SupabaseClient | null = null;
-
-function getSupabase(): SupabaseClient {
-  if (_supabase) return _supabase;
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) {
-    throw new ProviderError(
-      'CONFIG_ERROR',
-      'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set',
-    );
-  }
-  _supabase = createClient(url, key);
-  return _supabase;
-}
+import { getClient, updateHistoryId } from '../db';
 
 // ── PubSub payload types ─────────────────────────────────────────────────────
 
@@ -75,23 +57,17 @@ function decodePubSubData(data: string): GmailNotification {
 
 // ── User lookup ──────────────────────────────────────────────────────────────
 
-interface UserRow {
-  id:         string;
-  history_id: string | null;
-}
-
 async function getUserByEmail(
-  supabase: SupabaseClient,
   email: string,
-): Promise<UserRow | null> {
-  const { data, error } = await supabase
+): Promise<{ id: string; history_id: string | null } | null> {
+  const { data, error } = await getClient()
     .from('users')
     .select('id, history_id')
     .eq('email', email)
-    .single();
+    .maybeSingle();
 
   if (error || !data) return null;
-  return data as UserRow;
+  return data;
 }
 
 // ── History delta ────────────────────────────────────────────────────────────
@@ -132,23 +108,6 @@ async function collectDeltaMessageIds(
   } while (pageToken);
 
   return ids;
-}
-
-// ── History ID persistence ───────────────────────────────────────────────────
-
-async function updateHistoryId(
-  supabase: SupabaseClient,
-  userId: string,
-  historyId: string,
-): Promise<void> {
-  const { error } = await supabase
-    .from('users')
-    .update({ history_id: historyId })
-    .eq('id', userId);
-
-  if (error) {
-    throw new ProviderError('HISTORY_ID_UPDATE_FAILED', error.message, error);
-  }
 }
 
 // ── Main handler ─────────────────────────────────────────────────────────────
@@ -202,8 +161,7 @@ export async function processGmailNotification(
   const newHistoryId = String(historyId);
 
   // ── 3. Fetch user ──────────────────────────────────────────────────────────
-  const supabase = getSupabase();
-  const user = await getUserByEmail(supabase, emailAddress);
+  const user = await getUserByEmail(emailAddress);
 
   if (!user) {
     console.error(`[webhook:gmail] No user found for email: ${emailAddress}`);
@@ -216,7 +174,7 @@ export async function processGmailNotification(
       `[webhook:gmail] No history_id stored for user ${user.id} — ` +
       'initial sync has not completed; updating history_id and skipping delta.',
     );
-    await updateHistoryId(supabase, user.id, newHistoryId);
+    await updateHistoryId(user.id, newHistoryId);
     return;
   }
 
@@ -239,9 +197,9 @@ export async function processGmailNotification(
       batch.push(normalizeMessage(msg, user.id));
     }
 
-    await upsertMessages(supabase, batch);
+    await upsertMessages(batch);
   }
 
   // ── 7. Advance stored history_id ──────────────────────────────────────────
-  await updateHistoryId(supabase, user.id, newHistoryId);
+  await updateHistoryId(user.id, newHistoryId);
 }

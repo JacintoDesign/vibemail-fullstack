@@ -1,7 +1,7 @@
 import { gmail_v1 } from 'googleapis';
-import { SupabaseClient } from '@supabase/supabase-js';
 import { Message } from '../types/message';
 import { ProviderError } from '../types/provider';
+import { getClient } from '../db';
 
 // ── Header extraction ────────────────────────────────────────────────────────
 
@@ -176,10 +176,9 @@ export function rowToMessage(row: DbMessageRow): Message {
 // ── Upsert ───────────────────────────────────────────────────────────────────
 
 export async function upsertMessages(
-  supabase: SupabaseClient,
   messages: Array<Omit<Message, 'id' | 'createdAt' | 'updatedAt'>>,
 ): Promise<void> {
-  const { error } = await supabase
+  const { error } = await getClient()
     .from('messages')
     .upsert(messages.map(toRow), { onConflict: 'gmail_id' });
 

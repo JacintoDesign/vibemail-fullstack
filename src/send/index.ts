@@ -1,27 +1,8 @@
 import { google } from 'googleapis';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { loadOAuth2Client } from '../providers/gmail/auth';
 import { SendMessageOptions, ProviderError } from '../types/provider';
 import { Message } from '../types/message';
 import { normalizeMessage, upsertMessages } from '../sync/normalize';
-
-// ── Supabase (lazy singleton) ────────────────────────────────────────────────
-
-let _supabase: SupabaseClient | null = null;
-
-function getSupabase(): SupabaseClient {
-  if (_supabase) return _supabase;
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) {
-    throw new ProviderError(
-      'CONFIG_ERROR',
-      'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set',
-    );
-  }
-  _supabase = createClient(url, key);
-  return _supabase;
-}
 
 // ── RFC 2822 construction ────────────────────────────────────────────────────
 
@@ -59,9 +40,8 @@ export async function sendMessage(
   userId: string,
   options: SendMessageOptions,
 ): Promise<Message> {
-  const auth    = await loadOAuth2Client(userId);
-  const gmail   = google.gmail({ version: 'v1', auth });
-  const supabase = getSupabase();
+  const auth  = await loadOAuth2Client(userId);
+  const gmail = google.gmail({ version: 'v1', auth });
 
   // Fetch sender address for the RFC 2822 From header.
   const { data: profile } = await gmail.users.getProfile({ userId: 'me' });
@@ -111,7 +91,7 @@ export async function sendMessage(
   // normalizeMessage extracts from/to headers and maps them;
   // upsertMessages maps them to from_address / to_address in the DB row.
   const normalized = normalizeMessage(fullMsg, userId);
-  await upsertMessages(supabase, [normalized]);
+  await upsertMessages([normalized]);
 
   // Return the full Message record.
   // id is set to gmailId per CONTRACT.md §3; timestamps are Supabase-managed

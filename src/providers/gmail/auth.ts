@@ -1,28 +1,10 @@
 import crypto from 'crypto';
 import { google } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { OAuthTokens, ProviderError } from '../../types/provider';
+import { getClient, getUser, updateUserTokens as dbUpdateUserTokens, updateHistoryId, updateWatchExpiry } from '../../db';
 
 const GMAIL_SCOPES = ['https://www.googleapis.com/auth/gmail.modify'];
-
-// ── Supabase (lazy singleton) ────────────────────────────────────────────────
-
-let _supabase: SupabaseClient | null = null;
-
-function getSupabase(): SupabaseClient {
-  if (_supabase) return _supabase;
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) {
-    throw new ProviderError(
-      'CONFIG_ERROR',
-      'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set',
-    );
-  }
-  _supabase = createClient(url, key);
-  return _supabase;
-}
 
 // ── OAuth2 client factory ────────────────────────────────────────────────────
 
@@ -103,18 +85,16 @@ export async function persistTokens(
   name: string,
   tokens: OAuthTokens,
 ): Promise<string> {
-  const supabase = getSupabase();
-
-  const { data, error } = await supabase
+  const { data, error } = await getClient()
     .from('users')
     .upsert(
       {
-        google_id: googleId,
+        google_id:               googleId,
         email,
         name,
-        encrypted_access_token: encrypt(tokens.accessToken),
+        encrypted_access_token:  encrypt(tokens.accessToken),
         encrypted_refresh_token: encrypt(tokens.refreshToken),
-        token_expires_at: tokens.expiresAt ?? null,
+        token_expires_at:        tokens.expiresAt ?? null,
       },
       { onConflict: 'google_id' },
     )
@@ -131,24 +111,16 @@ export async function persistTokens(
 /**
  * Updates only the access token fields for an existing user.
  * Called by the tokens event listener on every silent refresh.
+ * Encrypts the new token then delegates to the db layer.
  */
 export async function updateUserTokens(
   userId: string,
   tokens: Pick<OAuthTokens, 'accessToken' | 'expiresAt'>,
 ): Promise<void> {
-  const supabase = getSupabase();
-
-  const { error } = await supabase
-    .from('users')
-    .update({
-      encrypted_access_token: encrypt(tokens.accessToken),
-      token_expires_at: tokens.expiresAt ?? null,
-    })
-    .eq('id', userId);
-
-  if (error) {
-    throw new ProviderError('TOKEN_UPDATE_FAILED', error.message, error);
-  }
+  await dbUpdateUserTokens(userId, {
+    encryptedAccessToken: encrypt(tokens.accessToken),
+    tokenExpiresAt:       tokens.expiresAt ?? null,
+  });
 }
 
 // ── Tokens event listener ────────────────────────────────────────────────────
@@ -200,18 +172,10 @@ async function setupWatch(client: OAuth2Client, userId: string): Promise<void> {
     throw new ProviderError('WATCH_SETUP_FAILED', 'Failed to register Gmail watch', err);
   }
 
-  const supabase = getSupabase();
-  const { error } = await supabase
-    .from('users')
-    .update({
-      history_id: watchData.historyId ?? null,
-      watch_expiry: watchData.expiration ? Number(watchData.expiration) : null,
-      watch_resource_id: null, // set by /webhook/gmail on first Pub/Sub push
-    })
-    .eq('id', userId);
-
-  if (error) {
-    throw new ProviderError('WATCH_SETUP_FAILED', error.message, error);
+  const expiry = watchData.expiration ? Number(watchData.expiration) : null;
+  await updateWatchExpiry(userId, expiry, null);   // watch_resource_id set on first push
+  if (watchData.historyId) {
+    await updateHistoryId(userId, watchData.historyId);
   }
 }
 
@@ -309,19 +273,12 @@ export async function exchangeCode(
  * Persists the new access token back to Supabase before returning.
  */
 export async function refreshAccessToken(userId: string): Promise<OAuthTokens> {
-  const supabase = getSupabase();
+  const row = await getUser(userId);
 
-  const { data, error } = await supabase
-    .from('users')
-    .select('encrypted_refresh_token, token_expires_at')
-    .eq('id', userId)
-    .single();
-
-  if (error || !data) {
-    throw new ProviderError('USER_NOT_FOUND', `No user found for id: ${userId}`, error);
+  if (!row || !row.encrypted_refresh_token) {
+    throw new ProviderError('USER_NOT_FOUND', `No user found for id: ${userId}`);
   }
 
-  const row = data as { encrypted_refresh_token: string; token_expires_at: number | null };
   const decryptedRefresh = decrypt(row.encrypted_refresh_token);
 
   const client = createOAuth2Client();
@@ -361,29 +318,17 @@ export async function refreshAccessToken(userId: string): Promise<OAuthTokens> {
  * Used by all message-layer functions (Units 3–5).
  */
 export async function loadOAuth2Client(userId: string): Promise<OAuth2Client> {
-  const supabase = getSupabase();
+  const row = await getUser(userId);
 
-  const { data, error } = await supabase
-    .from('users')
-    .select('encrypted_access_token, encrypted_refresh_token, token_expires_at')
-    .eq('id', userId)
-    .single();
-
-  if (error || !data) {
-    throw new ProviderError('USER_NOT_FOUND', `No user found for id: ${userId}`, error);
+  if (!row || !row.encrypted_access_token || !row.encrypted_refresh_token) {
+    throw new ProviderError('USER_NOT_FOUND', `No user found for id: ${userId}`);
   }
-
-  const row = data as {
-    encrypted_access_token: string;
-    encrypted_refresh_token: string;
-    token_expires_at: number | null;
-  };
 
   const client = createOAuth2Client();
   client.setCredentials({
-    access_token: decrypt(row.encrypted_access_token),
+    access_token:  decrypt(row.encrypted_access_token),
     refresh_token: decrypt(row.encrypted_refresh_token),
-    expiry_date: row.token_expires_at ?? undefined,
+    expiry_date:   row.token_expires_at ?? undefined,
   });
 
   attachTokensListener(client, userId);

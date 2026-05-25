@@ -1,52 +1,18 @@
 import { google } from 'googleapis';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { loadOAuth2Client } from '../providers/gmail/auth';
-import { Message } from '../types/message';
-import { ProviderError } from '../types/provider';
-import { normalizeMessage, upsertMessages } from './normalize';
+import { normalizeMessage } from './normalize';
+import { upsertMessage, updateHistoryId } from '../db';
 
 const MAX_INITIAL_SYNC = 50;
-
-// ── Supabase (lazy singleton) ────────────────────────────────────────────────
-
-let _supabase: SupabaseClient | null = null;
-
-function getSupabase(): SupabaseClient {
-  if (_supabase) return _supabase;
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) {
-    throw new ProviderError(
-      'CONFIG_ERROR',
-      'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set',
-    );
-  }
-  _supabase = createClient(url, key);
-  return _supabase;
-}
-
-// ── Persistence helpers ──────────────────────────────────────────────────────
-
-async function storeHistoryId(
-  supabase: SupabaseClient,
-  userId: string,
-  historyId: string,
-): Promise<void> {
-  const { error } = await supabase
-    .from('users')
-    .update({ history_id: historyId })
-    .eq('id', userId);
-
-  if (error) {
-    throw new ProviderError('HISTORY_ID_STORE_FAILED', error.message, error);
-  }
-}
 
 // ── Initial sync ─────────────────────────────────────────────────────────────
 
 /**
  * Fetches up to MAX_INITIAL_SYNC (50) messages from INBOX, normalizes them
- * to the Message shape, and upserts them to Supabase.
+ * to the Message shape, and upserts them via the db layer.
+ *
+ * Each normalized message flows through db.upsertMessage, which maps
+ * msg.from → from_address and msg.to → to_address before writing.
  *
  * historyId is sourced from individual messages.get responses (it is NOT
  * present on the messages.list response). The historyId of the last fetched
@@ -54,9 +20,8 @@ async function storeHistoryId(
  * can use it as the startHistoryId for subsequent history.list calls.
  */
 export async function runInitialSync(userId: string): Promise<void> {
-  const auth    = await loadOAuth2Client(userId);
-  const gmail   = google.gmail({ version: 'v1', auth });
-  const supabase = getSupabase();
+  const auth  = await loadOAuth2Client(userId);
+  const gmail = google.gmail({ version: 'v1', auth });
 
   let fetched       = 0;
   let pageToken: string | undefined;
@@ -75,8 +40,6 @@ export async function runInitialSync(userId: string): Promise<void> {
     const refs = listData.messages ?? [];
     if (refs.length === 0) break;
 
-    const batch: Array<Omit<Message, 'id' | 'createdAt' | 'updatedAt'>> = [];
-
     for (const ref of refs) {
       if (!ref.id || fetched >= MAX_INITIAL_SYNC) break;
 
@@ -89,12 +52,10 @@ export async function runInitialSync(userId: string): Promise<void> {
       // historyId is not on messages.list — track it from each messages.get
       if (msg.historyId) lastHistoryId = msg.historyId;
 
-      batch.push(normalizeMessage(msg, userId));
+      // normalizeMessage extracts headers (including from/to); upsertMessage
+      // maps from → from_address and to → to_address before writing to DB.
+      await upsertMessage(normalizeMessage(msg, userId));
       fetched++;
-    }
-
-    if (batch.length > 0) {
-      await upsertMessages(supabase, batch);
     }
 
     if (!listData.nextPageToken || fetched >= MAX_INITIAL_SYNC) break;
@@ -102,6 +63,6 @@ export async function runInitialSync(userId: string): Promise<void> {
   }
 
   if (lastHistoryId) {
-    await storeHistoryId(supabase, userId, lastHistoryId);
+    await updateHistoryId(userId, lastHistoryId);
   }
 }
