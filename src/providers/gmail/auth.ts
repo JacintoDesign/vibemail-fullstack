@@ -1,10 +1,14 @@
 import crypto from 'crypto';
 import { google } from 'googleapis';
-import { OAuth2Client } from 'google-auth-library';
+import { OAuth2Client, TokenInfo } from 'google-auth-library';
 import { OAuthTokens, ProviderError } from '../../types/provider';
 import { getClient, getUser, updateUserTokens as dbUpdateUserTokens, updateHistoryId, updateWatchExpiry } from '../../db';
 
-const GMAIL_SCOPES = ['https://www.googleapis.com/auth/gmail.modify'];
+const GMAIL_SCOPES = [
+  'https://www.googleapis.com/auth/gmail.modify',
+  'https://www.googleapis.com/auth/userinfo.email',
+  'https://www.googleapis.com/auth/userinfo.profile',
+];
 
 // ── OAuth2 client factory ────────────────────────────────────────────────────
 
@@ -230,41 +234,45 @@ export async function exchangeCode(
     );
   }
 
-  // Fetch the Google profile for google_id, email, and display name.
-  client.setCredentials(rawTokens);
-  const oauth2Api = google.oauth2({ version: 'v2', auth: client });
-  let profile: { id?: string | null; email?: string | null; name?: string | null };
+  // Fetch user identity from the token info endpoint.
+  // sub is the immutable Google user ID; name is present when the
+  // userinfo.profile scope is granted (not in googleapis TokenInfo types).
+  let tokenInfo: TokenInfo & { name?: string };
   try {
-    const { data } = await oauth2Api.userinfo.get();
-    profile = data;
+    tokenInfo = (await client.getTokenInfo(
+      rawTokens.access_token,
+    )) as TokenInfo & { name?: string };
   } catch (err) {
-    throw new ProviderError('TOKEN_EXCHANGE_FAILED', 'Failed to fetch Google user profile', err);
+    throw new ProviderError('TOKEN_EXCHANGE_FAILED', 'Failed to fetch token info', err);
   }
 
-  if (!profile.id || !profile.email) {
+  if (!tokenInfo.sub || !tokenInfo.email) {
     throw new ProviderError(
       'TOKEN_EXCHANGE_FAILED',
-      'Google profile is missing id or email',
+      'Token info is missing required fields: sub, email',
     );
   }
 
   const tokens: OAuthTokens = {
-    accessToken: rawTokens.access_token,
+    accessToken:  rawTokens.access_token,
     refreshToken: rawTokens.refresh_token,
-    expiresAt: rawTokens.expiry_date ?? undefined,
+    expiresAt:    rawTokens.expiry_date ?? undefined,
   };
 
+  // Set credentials on the client before watch setup and the token listener.
+  client.setCredentials(rawTokens);
+
   const userId = await persistTokens(
-    profile.id,
-    profile.email,
-    profile.name ?? profile.email,
+    tokenInfo.sub,
+    tokenInfo.email,
+    tokenInfo.name ?? tokenInfo.email,
     tokens,
   );
 
   attachTokensListener(client, userId);
   await setupWatch(client, userId);
 
-  return { ...tokens, userId, email: profile.email, name: profile.name ?? profile.email };
+  return { ...tokens, userId, email: tokenInfo.email, name: tokenInfo.name ?? tokenInfo.email };
 }
 
 /**
