@@ -3,6 +3,7 @@ import { google } from 'googleapis';
 import { OAuth2Client, TokenInfo } from 'google-auth-library';
 import { OAuthTokens, ProviderError } from '../../types/provider';
 import { getClient, getUser, updateUserTokens as dbUpdateUserTokens, updateHistoryId, updateWatchExpiry } from '../../db';
+import { runInitialSync } from '../../sync/index';
 
 const GMAIL_SCOPES = [
   'https://www.googleapis.com/auth/gmail.modify',
@@ -271,6 +272,7 @@ export async function exchangeCode(
 
   attachTokensListener(client, userId);
   await setupWatch(client, userId);
+  await runInitialSync(userId);
 
   return { ...tokens, userId, email: tokenInfo.email, name: tokenInfo.name ?? tokenInfo.email };
 }
