@@ -153,12 +153,16 @@ export function attachTokensListener(client: OAuth2Client, userId: string): void
 
 /**
  * Registers a Gmail push-notification watch for the authenticated user.
- * Stores history_id and watch_expiry to the users row.
- * watch_resource_id is populated later by the /webhook/gmail receiver
- * (it arrives in the X-Goog-Resource-ID push notification header, not in
- * the watch response).
+ * Always updates watch_expiry. Only updates history_id for new users —
+ * returning users keep their existing history_id so the Pub/Sub webhook can
+ * call history.list from where it left off and catch up on any emails that
+ * arrived while the previous watch was expired.
  */
-async function setupWatch(client: OAuth2Client, userId: string): Promise<void> {
+async function setupWatch(
+  client:    OAuth2Client,
+  userId:    string,
+  isNewUser: boolean,
+): Promise<void> {
   const topicName = process.env.GOOGLE_PUBSUB_TOPIC;
   if (!topicName) {
     throw new ProviderError('CONFIG_ERROR', 'GOOGLE_PUBSUB_TOPIC env var is not set');
@@ -179,7 +183,11 @@ async function setupWatch(client: OAuth2Client, userId: string): Promise<void> {
 
   const expiry = watchData.expiration ? Number(watchData.expiration) : null;
   await updateWatchExpiry(userId, expiry, null);   // watch_resource_id set on first push
-  if (watchData.historyId) {
+
+  // Only set history_id for new users. The watch response historyId is the
+  // Pub/Sub checkpoint: new emails arriving after this point will be delivered
+  // via Pub/Sub and fetched via history.list(startHistoryId).
+  if (isNewUser && watchData.historyId) {
     await updateHistoryId(userId, watchData.historyId);
   }
 }
@@ -270,9 +278,21 @@ export async function exchangeCode(
     tokens,
   );
 
+  // Determine if this is a first-time login before setupWatch overwrites state.
+  // Returning users keep their existing history_id so the Pub/Sub webhook can
+  // resume from where it left off (catching up emails missed while watch was expired).
+  const existingUser = await getUser(userId);
+  const isNewUser    = !existingUser?.history_id;
+
   attachTokensListener(client, userId);
-  await setupWatch(client, userId);
-  await runInitialSync(userId);
+  await setupWatch(client, userId, isNewUser);
+
+  // Only run the 50-message seed sync for new users. For returning users the
+  // existing DB rows are already populated; Pub/Sub + history.list handles any
+  // gap from a lapsed watch.
+  if (isNewUser) {
+    await runInitialSync(userId);
+  }
 
   return { ...tokens, userId, email: tokenInfo.email, name: tokenInfo.name ?? tokenInfo.email };
 }

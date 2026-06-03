@@ -1,7 +1,7 @@
 import { google } from 'googleapis';
 import { loadOAuth2Client } from '../providers/gmail/auth';
 import { normalizeMessage } from './normalize';
-import { upsertMessage, updateHistoryId } from '../db';
+import { upsertMessage } from '../db';
 
 const MAX_INITIAL_SYNC = 50;
 
@@ -11,21 +11,19 @@ const MAX_INITIAL_SYNC = 50;
  * Fetches up to MAX_INITIAL_SYNC (50) messages from INBOX, normalizes them
  * to the Message shape, and upserts them via the db layer.
  *
- * Each normalized message flows through db.upsertMessage, which maps
- * msg.from → from_address and msg.to → to_address before writing.
- *
- * historyId is sourced from individual messages.get responses (it is NOT
- * present on the messages.list response). The historyId of the last fetched
- * message is stored to users.history_id so the Pub/Sub webhook receiver
- * can use it as the startHistoryId for subsequent history.list calls.
+ * Does NOT update users.history_id — that is set by setupWatch before this
+ * function is called. setupWatch's historyId represents the mailbox state at
+ * watch registration and is the correct Pub/Sub checkpoint; overwriting it
+ * here with a per-message historyId (which belongs to an older message)
+ * would regress the checkpoint and cause history.list to span an unexpectedly
+ * large range on the next Pub/Sub delivery.
  */
 export async function runInitialSync(userId: string): Promise<void> {
   const auth  = await loadOAuth2Client(userId);
   const gmail = google.gmail({ version: 'v1', auth });
 
-  let fetched       = 0;
+  let fetched   = 0;
   let pageToken: string | undefined;
-  let lastHistoryId: string | undefined;
 
   while (fetched < MAX_INITIAL_SYNC) {
     const remaining = MAX_INITIAL_SYNC - fetched;
@@ -49,20 +47,11 @@ export async function runInitialSync(userId: string): Promise<void> {
         format: 'FULL',
       });
 
-      // historyId is not on messages.list — track it from each messages.get
-      if (msg.historyId) lastHistoryId = msg.historyId;
-
-      // normalizeMessage extracts headers (including from/to); upsertMessage
-      // maps from → from_address and to → to_address before writing to DB.
       await upsertMessage(normalizeMessage(msg, userId));
       fetched++;
     }
 
     if (!listData.nextPageToken || fetched >= MAX_INITIAL_SYNC) break;
     pageToken = listData.nextPageToken;
-  }
-
-  if (lastHistoryId) {
-    await updateHistoryId(userId, lastHistoryId);
   }
 }
