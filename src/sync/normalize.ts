@@ -77,18 +77,19 @@ export function normalizeMessage(
 
   return {
     userId,
-    gmailId:   msg.id ?? '',
-    threadId:  msg.threadId ?? '',
+    gmailId:      msg.id ?? '',
+    threadId:     msg.threadId ?? '',
     labelIds,
-    from:      getHeader(headers, 'from'),
-    to:        getHeader(headers, 'to'),
-    subject:   getHeader(headers, 'subject'),
-    date:      getHeader(headers, 'date'),
-    snippet:   msg.snippet ?? '',
+    internalDate: msg.internalDate ?? '0',
+    from:         getHeader(headers, 'from'),
+    to:           getHeader(headers, 'to'),
+    subject:      getHeader(headers, 'subject'),
+    date:         getHeader(headers, 'date'),
+    snippet:      msg.snippet ?? '',
     bodyPlain,
     bodyHtml,
-    isRead:    !labelIds.includes('UNREAD'),
-    isStarred: labelIds.includes('STARRED'),
+    isRead:       !labelIds.includes('UNREAD'),
+    isStarred:    labelIds.includes('STARRED'),
   };
 }
 
@@ -109,6 +110,12 @@ export interface MessageRow {
   body_html:    string | null;
   is_read:      boolean;
   is_starred:   boolean;
+  created_at:   string;   // set to internalDate ISO so rows sort by email receipt time
+}
+
+function internalDateToIso(ms: string): string {
+  const n = Number(ms);
+  return Number.isFinite(n) && n > 0 ? new Date(n).toISOString() : new Date().toISOString();
 }
 
 export function toRow(
@@ -128,6 +135,7 @@ export function toRow(
     body_html:    msg.bodyHtml,
     is_read:      msg.isRead,
     is_starred:   msg.isStarred,
+    created_at:   internalDateToIso(msg.internalDate),
   };
 }
 
@@ -154,22 +162,23 @@ export interface DbMessageRow {
 
 export function rowToMessage(row: DbMessageRow): Message {
   return {
-    id:         row.id,
-    userId:     row.user_id,
-    createdAt:  row.created_at,
-    updatedAt:  row.updated_at,
-    gmailId:    row.gmail_id,
-    threadId:   row.thread_id,
-    labelIds:   row.label_ids,
-    from:       row.from_address,
-    to:         row.to_address,
-    subject:    row.subject,
-    date:       row.date,
-    snippet:    row.snippet,
-    bodyPlain:  row.body_plain,
-    bodyHtml:   row.body_html,
-    isRead:     row.is_read,
-    isStarred:  row.is_starred,
+    id:           row.id,
+    userId:       row.user_id,
+    createdAt:    row.created_at,
+    updatedAt:    row.updated_at,
+    gmailId:      row.gmail_id,
+    threadId:     row.thread_id,
+    labelIds:     row.label_ids,
+    internalDate: String(new Date(row.created_at).getTime()),
+    from:         row.from_address,
+    to:           row.to_address,
+    subject:      row.subject,
+    date:         row.date,
+    snippet:      row.snippet,
+    bodyPlain:    row.body_plain,
+    bodyHtml:     row.body_html,
+    isRead:       row.is_read,
+    isStarred:    row.is_starred,
   };
 }
 

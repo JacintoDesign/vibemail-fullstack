@@ -63,6 +63,7 @@ export type MessageRow = Tables<'messages'>;
 export async function upsertMessage(
   msg: Omit<Message, 'id' | 'createdAt' | 'updatedAt'>,
 ): Promise<void> {
+  const ms = Number(msg.internalDate);
   const row: TablesInsert<'messages'> = {
     user_id:      msg.userId,
     gmail_id:     msg.gmailId,
@@ -77,6 +78,11 @@ export async function upsertMessage(
     body_html:    msg.bodyHtml,
     is_read:      msg.isRead,
     is_starred:   msg.isStarred,
+    // Store the email receipt time as created_at so list queries sort by email
+    // date rather than DB insert time. internalDate is a Unix ms string from Gmail.
+    created_at:   Number.isFinite(ms) && ms > 0
+                    ? new Date(ms).toISOString()
+                    : undefined,
   };
 
   const { error } = await getClient()

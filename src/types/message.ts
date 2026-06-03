@@ -6,9 +6,10 @@ export interface Message {
   updatedAt:  string;        // TIMESTAMPTZ ISO 8601
 
   // ── Provider message identifiers ───────────────────────────────────────
-  gmailId:    string;
-  threadId:   string;
-  labelIds:   string[];
+  gmailId:      string;
+  threadId:     string;
+  labelIds:     string[];
+  internalDate: string;   // Unix ms timestamp string from Gmail — used to set created_at
 
   // ── Headers ────────────────────────────────────────────────────────────
   from:       string;

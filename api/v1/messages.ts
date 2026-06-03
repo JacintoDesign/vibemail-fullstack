@@ -46,12 +46,18 @@ async function handleList(req: VercelRequest, res: VercelResponse): Promise<void
       .select('*')
       .eq('user_id', payload.sub)
       .order('created_at', { ascending: false })
+      .order('gmail_id',   { ascending: false })  // stable tiebreaker within same ms
       .limit(limit + 1); // fetch one extra to determine if there's a next page
 
-    // Cursor is the base64-encoded created_at of the last message from the previous page.
+    // Cursor is a base64-encoded JSON payload: { d: created_at, g: gmail_id }.
+    // The compound filter ensures stable keyset pagination even when multiple
+    // messages share the same internalDate (created_at).
     if (cursor && typeof cursor === 'string') {
-      const decodedCursor = Buffer.from(cursor, 'base64').toString('utf8');
-      query = query.lt('created_at', decodedCursor);
+      const raw = Buffer.from(cursor, 'base64').toString('utf8');
+      const { d: cursorDate, g: cursorGmailId } = JSON.parse(raw) as { d: string; g: string };
+      query = query.or(
+        `created_at.lt.${cursorDate},and(created_at.eq.${cursorDate},gmail_id.lt.${cursorGmailId})`,
+      );
     }
 
     // Filter by label if provided.
@@ -71,7 +77,10 @@ async function handleList(req: VercelRequest, res: VercelResponse): Promise<void
     const messages = page.map(rowToMessage);
 
     const nextCursor = hasMore
-      ? Buffer.from(page[page.length - 1].created_at).toString('base64')
+      ? Buffer.from(JSON.stringify({
+          d: page[page.length - 1].created_at,
+          g: page[page.length - 1].gmail_id,
+        })).toString('base64')
       : null;
 
     res.status(200).json({ messages, nextCursor });
