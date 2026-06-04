@@ -32,7 +32,7 @@ The schema session authors migration SQL and shared TypeScript types in isolatio
 
 ## Key documents
 
-- **`CONTRACT.md`** — acceptance criteria, all four endpoint contracts (request/response shapes, typed error codes), the `Message` data model with Gmail API field mappings, and the two-session sequencing rule.
+- **`CONTRACT.md`** — acceptance criteria, all endpoint contracts (request/response shapes, typed error codes), the `Message` data model with Gmail API field mappings, and the two-session sequencing rule.
 - **`build_sequence.md`** — seven atomic build units in order, each with a one-sentence verify check that must pass before the next unit starts.
 
 Read both files before writing any code.
@@ -65,6 +65,9 @@ Output goes to `dist/`. Both `src/` and `api/` are included in the TypeScript co
 - All client-facing endpoints use the `/api/v1` base path.
 - All endpoints except `GET /api/v1/auth/google/callback` require `Authorization: Bearer <jwt>`.
 - The Pub/Sub webhook endpoint lives at **`/webhook/gmail`** — it is not under `/api/v1` and does not require a JWT; it validates the `GOOGLE_PUBSUB_VERIFICATION_TOKEN` instead.
+- Draft endpoints live at `/api/v1/drafts` — separate from `/api/v1/messages`. The Gmail drafts API (`drafts.create`, `drafts.update`, `drafts.delete`) is used for all draft operations; never use `messages.send` for drafts.
+- The `status` field on every `Message` is derived from `labelIds` at write time using the priority order in `CONTRACT.md §3`. Never accept `status` as a client-supplied value.
+- The `draftId` field stores the Gmail `drafts.id` (not the message ID). It is required to call `drafts.update` and `drafts.delete`. It must be cleared (set to `null`) in Supabase when a draft is sent.
 
 ## Never do
 
@@ -75,10 +78,14 @@ Output goes to `dist/`. Both `src/` and `api/` are included in the TypeScript co
 - **Never write to `src/db/` from the schema session branch.** That folder is owned by `main`.
 - **Never merge the schema branch before `npm test` exits 0.**
 - **Never hardcode credentials.** Every secret is consumed from environment variables.
+- **Never delete a Gmail draft without also deleting the Supabase row.** Both must succeed in the same handler; surface the error if the Supabase delete fails.
+- **Never accept `status` or `draftId` as client-supplied fields.** Both are server-derived and server-managed only.
 
 ## Gmail API notes
 
-All message reads use `messages.get(id, { format: 'FULL' })`. Headers (`From`, `To`, `Subject`, `Date`) are extracted from `message.payload.headers[]` by name (case-insensitive). Body parts are found by `mimeType` (`text/plain` / `text/html`) in `message.payload.parts[]` and base64url-decoded; for single-part messages fall back to `message.payload.body.data`. `isRead` and `isStarred` are derived from `labelIds` at write time — do not store them as independent source fields.
+All message reads use `messages.get(id, { format: 'FULL' })`. Headers (`From`, `To`, `Subject`, `Date`) are extracted from `message.payload.headers[]` by name (case-insensitive). Body parts are found by `mimeType` (`text/plain` / `text/html`) in `message.payload.parts[]` and base64url-decoded; for single-part messages fall back to `message.payload.body.data`. `isRead`, `isStarred`, and `status` are derived from `labelIds` at write time — do not store them as independent source fields.
+
+Draft creation uses `drafts.create` (not `messages.send`). The response contains `draft.id` (store as `draftId`) and `draft.message.id` (store as `gmailId`). Draft updates use `drafts.update` with the full message body re-encoded as RFC 2822 raw. Sending a draft uses `drafts.send` — this transitions the row: clear `draftId`, update `gmailId` to the new sent message ID, set `status = 'sent'`.
 
 Required OAuth scope: `https://www.googleapis.com/auth/gmail.modify`.
 
