@@ -1,6 +1,9 @@
 {
   "installCommand": "npm install",
   "buildCommand": "",
+  "rewrites": [
+    { "source": "/webhook/gmail", "destination": "/api/webhook/gmail" }
+  ],
   "crons": [
     {
       "path": "/api/cron/renew-watch",
