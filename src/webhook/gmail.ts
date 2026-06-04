@@ -189,15 +189,29 @@ export async function processGmailNotification(
     const batch: Array<Omit<Message, 'id' | 'createdAt' | 'updatedAt'>> = [];
 
     for (const id of messageIds) {
-      const { data: msg } = await gmail.users.messages.get({
-        userId: 'me',
-        id,
-        format: 'FULL',
-      });
-      batch.push(normalizeMessage(msg, user.id));
+      try {
+        const { data: msg } = await gmail.users.messages.get({
+          userId: 'me',
+          id,
+          format: 'FULL',
+        });
+        batch.push(normalizeMessage(msg, user.id));
+      } catch (err) {
+        const status = (err as Record<string, unknown>).status;
+        if (status === 404) {
+          // Message was deleted or is otherwise unavailable — skip it.
+          // This can happen when history.list references a sent-copy, a
+          // draft, or a message permanently deleted before we fetched it.
+          console.warn(`[webhook:gmail] Skipping message ${id}: not found`);
+          continue;
+        }
+        throw err;
+      }
     }
 
-    await upsertMessages(batch);
+    if (batch.length > 0) {
+      await upsertMessages(batch);
+    }
   }
 
   // ── 7. Advance stored history_id ──────────────────────────────────────────
