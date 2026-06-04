@@ -8,10 +8,13 @@ import { processGmailNotification } from '../../src/webhook/gmail';
  * Receives Pub/Sub push notifications for Gmail changes.
  * Authentication: GOOGLE_PUBSUB_VERIFICATION_TOKEN query param (not JWT).
  *
- * CRITICAL: HTTP 200 is sent immediately before processing begins.
- * PubSub marks delivery successful on receipt of 200 — any ack deadline
- * overrun would trigger retries. Processing errors are logged; they do not
- * affect the already-sent acknowledgment.
+ * Processing completes before the 200 is sent so that Pub/Sub retries on
+ * any unhandled error. The "respond-first" pattern does not work in Vercel
+ * Serverless Functions — the process is terminated as soon as the response
+ * is flushed, killing any async work started afterwards.
+ *
+ * Typical processing time (history.list + 1-3 messages.get + DB upserts)
+ * is well under 5 s, safely inside Pub/Sub's ack deadline.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== 'POST') {
@@ -19,17 +22,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
-  // ── Acknowledge immediately ───────────────────────────────────────────────
-  // PubSub requires a 2xx within its ack deadline. Responding before any
-  // async work guarantees we never miss the window regardless of processing time.
-  res.status(200).end();
-
-  // ── Extract verification token ────────────────────────────────────────────
   const { token } = req.query;
   const incomingToken = typeof token === 'string' ? token : '';
 
-  // ── Process asynchronously (200 already sent) ─────────────────────────────
-  processGmailNotification(req.body, incomingToken).catch((err: unknown) => {
+  try {
+    await processGmailNotification(req.body, incomingToken);
+  } catch (err) {
+    // Log but still ack — a permanent error (bad payload, missing user) should
+    // not trigger infinite Pub/Sub retries.
     console.error('[webhook:gmail] processGmailNotification error:', err);
-  });
+  }
+
+  res.status(200).end();
 }
