@@ -118,7 +118,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       else                    removeLabels.push('STARRED');
     }
     if (hasArchived && (archived as boolean)) {
+      // Remove INBOX and SENT so the message moves to All Mail only (true archive).
+      // Gmail keeps the message in Sent view if SENT is left on, which defeats
+      // the archive intent — especially for sent-to-self emails.
       removeLabels.push('INBOX');
+      if (row.label_ids.includes('SENT')) removeLabels.push('SENT');
+    }
+    if (hasArchived && !(archived as boolean)) {
+      // Unarchive: restore message to inbox.
+      addLabels.push('INBOX');
     }
     if (hasTrashed) {
       if (trashed as boolean) {

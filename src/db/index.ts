@@ -79,7 +79,9 @@ export async function upsertMessage(
     is_read:      msg.isRead,
     is_starred:   msg.isStarred,
     status:       msg.status,
-    draft_id:     msg.draftId,
+    // draft_id intentionally omitted — only draft-specific endpoints write this
+    // column; omitting it here ensures webhook syncs never overwrite a draftId
+    // that was set when the draft was created via POST /api/v1/drafts.
     // Store the email receipt time as created_at so list queries sort by email
     // date rather than DB insert time. internalDate is a Unix ms string from Gmail.
     created_at:   Number.isFinite(ms) && ms > 0

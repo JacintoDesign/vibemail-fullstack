@@ -129,7 +129,9 @@ export interface MessageRow {
   is_read:      boolean;
   is_starred:   boolean;
   status:       string;
-  draft_id:     string | null;
+  // draft_id is intentionally excluded — it is only written by draft-specific
+  // endpoints (POST /drafts, PATCH /drafts/:id/send). Omitting it here ensures
+  // webhook syncs never overwrite the draftId that was set at draft-creation time.
   created_at:   string;   // set to internalDate ISO so rows sort by email receipt time
 }
 
@@ -156,7 +158,7 @@ export function toRow(
     is_read:      msg.isRead,
     is_starred:   msg.isStarred,
     status:       msg.status,
-    draft_id:     msg.draftId,
+    // draft_id deliberately omitted — see MessageRow comment above
     created_at:   internalDateToIso(msg.internalDate),
   };
 }
