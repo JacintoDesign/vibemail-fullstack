@@ -25,6 +25,7 @@ export interface SeedUser {
 export interface SeedMessage {
   id:       string;
   gmail_id: string;
+  draft_id: string | null;
 }
 
 // ── Seed helpers ──────────────────────────────────────────────────────────────
@@ -72,6 +73,11 @@ export async function seedMessage(
     label_ids:  string[];
     is_read:    boolean;
     is_starred: boolean;
+    status:     string;
+    draft_id:   string | null;
+    subject:    string;
+    from_address: string;
+    snippet:    string;
   }>,
 ): Promise<SeedMessage> {
   const tag     = `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -79,22 +85,26 @@ export async function seedMessage(
 
   const { data, error } = await getTestClient()
     .from('messages')
+    // status and draft_id are new columns added by the schema migration.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .insert({
       user_id:      userId,
       gmail_id:     gmailId,
-      thread_id:    overrides?.thread_id  ?? `thread_${tag}`,
-      label_ids:    overrides?.label_ids  ?? ['INBOX'],
-      from_address: 'sender@example.com',
+      thread_id:    overrides?.thread_id    ?? `thread_${tag}`,
+      label_ids:    overrides?.label_ids    ?? ['INBOX'],
+      from_address: overrides?.from_address ?? 'sender@example.com',
       to_address:   'recipient@example.com',
-      subject:      'Test Subject',
+      subject:      overrides?.subject      ?? 'Test Subject',
       date:         new Date().toUTCString(),
-      snippet:      'Test snippet',
+      snippet:      overrides?.snippet      ?? 'Test snippet',
       body_plain:   'Hello world',
       body_html:    '<p>Hello world</p>',
-      is_read:      overrides?.is_read    ?? false,
-      is_starred:   overrides?.is_starred ?? false,
-    })
-    .select('id, gmail_id')
+      is_read:      overrides?.is_read      ?? false,
+      is_starred:   overrides?.is_starred   ?? false,
+      status:       overrides?.status       ?? 'inbox',
+      draft_id:     overrides?.draft_id     ?? null,
+    } as any)
+    .select('id, gmail_id, draft_id')
     .single();
 
   if (error || !data) throw new Error(`seedMessage failed: ${error?.message}`);

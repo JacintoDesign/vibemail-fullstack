@@ -21,6 +21,7 @@
    - [4.8 Draft Create](#48-draft-create----post-apiv1drafts)
    - [4.9 Draft Update](#49-draft-update----patch-apiv1draftsid)
    - [4.10 Draft Delete](#410-draft-delete----delete-apiv1draftsid)
+   - [4.11 Draft Send](#411-draft-send----post-apiv1draftsidsend)
 
 ---
 
@@ -40,6 +41,7 @@ The project is **complete** when all nine criteria are simultaneously true:
 | AC-12 | `POST /api/v1/drafts` creates a Gmail draft and persists it with `status = 'draft'` in Supabase | Jest |
 | AC-13 | `PATCH /api/v1/drafts/:id` updates a Gmail draft and reflects the change in Supabase | Jest |
 | AC-14 | `DELETE /api/v1/drafts/:id` deletes the Gmail draft and removes the Supabase row atomically | Jest |
+| AC-15 | `POST /api/v1/drafts/:id/send` sends the draft via Gmail and transitions the Supabase row to `status = 'sent'` with `draftId` cleared | Jest |
 | AC-6 | `npm test` exits 0 with zero failures and zero skipped tests | CI |
 | AC-7 | `tsc --noEmit` exits 0 with zero type errors | CI |
 | AC-8 | No credentials appear in source code — every secret is consumed from environment variables | Code review |
@@ -582,6 +584,44 @@ No body.
 | 404 | `DRAFT_NOT_FOUND` | No draft with `:id` exists for the authenticated user |
 | 429 | `GMAIL_RATE_LIMITED` | Gmail API responded with HTTP 429 |
 | 502 | `GMAIL_DRAFT_FAILED` | Gmail `drafts.delete` returned any other non-2xx status |
+
+---
+
+---
+
+### 4.11 Draft Send — `POST /api/v1/drafts/:id/send`
+
+Sends an existing Gmail draft via `drafts.send` and transitions the Supabase row: clears `draftId`, updates `gmailId` to the new sent message ID, and sets `status = 'sent'`. `:id` is the Supabase `messages.id` (= Gmail messageId of the draft).
+
+#### Request
+
+```
+Method:  POST
+Path:    /api/v1/drafts/:id/send
+Auth:    Authorization: Bearer <jwt>   required
+
+Path parameters:
+  id   string   required   messages.id in Supabase (= Gmail messageId of the draft)
+
+Body: none required
+```
+
+#### Response — 200 OK
+
+```typescript
+{
+  message: Message   // status = 'sent', draftId = null, gmailId updated to sent message ID
+}
+```
+
+#### Typed error cases
+
+| HTTP | `error.code` | Condition |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | JWT is missing, malformed, expired, or signature invalid |
+| 404 | `DRAFT_NOT_FOUND` | No draft with `:id` exists for the authenticated user |
+| 429 | `GMAIL_RATE_LIMITED` | Gmail API responded with HTTP 429 |
+| 502 | `GMAIL_DRAFT_FAILED` | Gmail `drafts.send` returned any other non-2xx status |
 
 ---
 

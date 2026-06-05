@@ -64,7 +64,11 @@ export async function upsertMessage(
   msg: Omit<Message, 'id' | 'createdAt' | 'updatedAt'>,
 ): Promise<void> {
   const ms = Number(msg.internalDate);
-  const row: TablesInsert<'messages'> = {
+  // Cast required: status and draft_id are new columns not yet reflected in
+  // the Supabase generated types. They will be present once the schema
+  // migration runs (see migrations/ on the schema branch).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const row: any = {
     user_id:      msg.userId,
     gmail_id:     msg.gmailId,
     thread_id:    msg.threadId,
@@ -78,6 +82,8 @@ export async function upsertMessage(
     body_html:    msg.bodyHtml,
     is_read:      msg.isRead,
     is_starred:   msg.isStarred,
+    status:       msg.status,
+    draft_id:     msg.draftId,
     // Store the email receipt time as created_at so list queries sort by email
     // date rather than DB insert time. internalDate is a Unix ms string from Gmail.
     created_at:   Number.isFinite(ms) && ms > 0

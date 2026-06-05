@@ -1,7 +1,22 @@
 import { gmail_v1 } from 'googleapis';
-import { Message } from '../types/message';
+import { Message, MessageStatus } from '../types/message';
 import { ProviderError } from '../types/provider';
 import { getClient } from '../db';
+
+// ── Status derivation ────────────────────────────────────────────────────────
+
+/**
+ * Derives the message status from Gmail labelIds using the priority order
+ * defined in CONTRACT.md §3. Called at write time — never stored as a
+ * client-supplied value.
+ */
+export function deriveStatus(labelIds: string[]): MessageStatus {
+  if (labelIds.includes('DRAFT'))                                            return 'draft';
+  if (labelIds.includes('TRASH'))                                            return 'trash';
+  if (labelIds.includes('SENT') && !labelIds.includes('DRAFT'))             return 'sent';
+  if (!labelIds.includes('INBOX') && !labelIds.includes('SENT'))            return 'archived';
+  return 'inbox';
+}
 
 // ── Header extraction ────────────────────────────────────────────────────────
 
@@ -70,6 +85,7 @@ export function extractBodies(msg: gmail_v1.Schema$Message): {
 export function normalizeMessage(
   msg: gmail_v1.Schema$Message,
   userId: string,
+  draftId: string | null = null,
 ): Omit<Message, 'id' | 'createdAt' | 'updatedAt'> {
   const headers  = msg.payload?.headers ?? [];
   const labelIds = msg.labelIds ?? [];
@@ -90,6 +106,8 @@ export function normalizeMessage(
     bodyHtml,
     isRead:       !labelIds.includes('UNREAD'),
     isStarred:    labelIds.includes('STARRED'),
+    status:       deriveStatus(labelIds),
+    draftId,
   };
 }
 
@@ -110,6 +128,8 @@ export interface MessageRow {
   body_html:    string | null;
   is_read:      boolean;
   is_starred:   boolean;
+  status:       string;
+  draft_id:     string | null;
   created_at:   string;   // set to internalDate ISO so rows sort by email receipt time
 }
 
@@ -135,6 +155,8 @@ export function toRow(
     body_html:    msg.bodyHtml,
     is_read:      msg.isRead,
     is_starred:   msg.isStarred,
+    status:       msg.status,
+    draft_id:     msg.draftId,
     created_at:   internalDateToIso(msg.internalDate),
   };
 }
@@ -156,6 +178,8 @@ export interface DbMessageRow {
   body_html:    string | null;
   is_read:      boolean;
   is_starred:   boolean;
+  status:       string;
+  draft_id:     string | null;
   created_at:   string;
   updated_at:   string;
 }
@@ -179,6 +203,8 @@ export function rowToMessage(row: DbMessageRow): Message {
     bodyHtml:     row.body_html,
     isRead:       row.is_read,
     isStarred:    row.is_starred,
+    status:       row.status as Message['status'],
+    draftId:      row.draft_id,
   };
 }
 
@@ -187,9 +213,13 @@ export function rowToMessage(row: DbMessageRow): Message {
 export async function upsertMessages(
   messages: Array<Omit<Message, 'id' | 'createdAt' | 'updatedAt'>>,
 ): Promise<void> {
+  // Cast required: status and draft_id are new columns not yet reflected
+  // in the Supabase generated types. They will be present once the schema
+  // migration runs (see migrations/ on the schema branch).
   const { error } = await getClient()
     .from('messages')
-    .upsert(messages.map(toRow), { onConflict: 'gmail_id' });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .upsert(messages.map(toRow) as any[], { onConflict: 'gmail_id' });
 
   if (error) {
     throw new ProviderError('SYNC_UPSERT_FAILED', error.message, error);

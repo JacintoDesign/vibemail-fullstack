@@ -1,3 +1,5 @@
+export type MessageStatus = 'inbox' | 'sent' | 'draft' | 'archived' | 'trash';
+
 export interface Message {
   // ── Supabase-managed ───────────────────────────────────────────────────
   id:         string;        // TEXT PRIMARY KEY — set to gmailId at insert
@@ -25,4 +27,8 @@ export interface Message {
   // ── Derived flags ──────────────────────────────────────────────────────
   isRead:     boolean;
   isStarred:  boolean;
+
+  // ── Status & draft identity ────────────────────────────────────────────
+  status:     MessageStatus;   // derived from labelIds at write time
+  draftId:    string | null;   // Gmail drafts.id — only set for draft rows
 }
