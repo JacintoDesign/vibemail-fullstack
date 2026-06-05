@@ -92,21 +92,31 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse): Promise<vo
     const raw = buildRaw(from, { to: newTo, subject: newSubject, body: newBody });
 
     // ── Update via Gmail drafts API ───────────────────────────────────────
+    // Gmail creates a NEW underlying message ID on every drafts.update call.
+    // We must capture that ID and write it to Supabase so the old row is
+    // updated in-place. Without this, the Pub/Sub webhook fires for the new
+    // message ID and inserts a duplicate row.
+    let newGmailMsgId: string = row.gmail_id;
     try {
-      await gmail.users.drafts.update({
+      const { data: updatedDraft } = await gmail.users.drafts.update({
         userId:  'me',
         id:      row.draft_id,
         requestBody: {
           message: { raw },
         },
       });
+      // drafts.update response always contains the new message ID.
+      newGmailMsgId = updatedDraft.message?.id ?? row.gmail_id;
     } catch (err) {
       throw new ProviderError('GMAIL_DRAFT_FAILED', 'Gmail drafts.update failed', err);
     }
 
     // ── Update Supabase ───────────────────────────────────────────────────
+    // Include gmail_id so the row's primary Gmail key stays in sync with the
+    // new message ID Gmail assigned. Filter by the OLD gmail_id (path param).
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updatePayload: any = {
+      gmail_id:   newGmailMsgId,
       to_address: newTo,
       subject:    newSubject,
       body_plain: newBody,
@@ -115,16 +125,17 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse): Promise<vo
     const { error: updateError } = await supabase
       .from('messages')
       .update(updatePayload)
-      .eq('gmail_id', id)
+      .eq('gmail_id', id)          // match on OLD gmail_id
       .eq('user_id', payload.sub);
 
     if (updateError) {
       throw new ProviderError('GMAIL_DRAFT_FAILED', updateError.message, updateError);
     }
 
-    // Return the updated message shape.
+    // Return the updated message shape (with the new gmail_id reflected).
     const updated: DbMessageRow = {
       ...row,
+      gmail_id:   newGmailMsgId,
       to_address: newTo,
       subject:    newSubject,
       body_plain: newBody,
