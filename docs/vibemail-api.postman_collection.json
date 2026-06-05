@@ -1816,7 +1816,53 @@
                 }
               ]
             },
-            "description": "Removes the INBOX label (moves to All Mail). `status` becomes `'archived'`.\n\nExpected response: **200 OK**\n```json\n{\"message\": {\"id\": \"...\", \"isRead\": true, \"isStarred\": false, \"status\": \"archived\"}}\n```"
+            "description": "Removes INBOX and SENT (if present) so the message moves to All Mail only. `status` becomes `'archived'`. On a sent-to-self message both labels are removed so the status correctly reflects archived rather than staying as sent.\n\nExpected response: **200 OK**\n```json\n{\"message\": {\"id\": \"...\", \"isRead\": true, \"isStarred\": false, \"status\": \"archived\"}}\n```"
+          }
+        },
+        {
+          "id": "04000001-0000-0000-0000-0000000000a5",
+          "name": "Happy path — unarchive a message",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"archived\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}",
+                  "description": "Use the same messageId you just archived."
+                }
+              ]
+            },
+            "description": "Adds INBOX back to an archived message, restoring it to the inbox. Run this immediately after the archive happy path to round-trip the state.\n\nExpected response: **200 OK**\n```json\n{\"message\": {\"id\": \"...\", \"isRead\": true, \"isStarred\": false, \"status\": \"inbox\"}}\n```"
           }
         },
         {
