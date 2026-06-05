@@ -50,8 +50,16 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/v1/auth/google/callback?code=4%2F0AX4XfWi_REPLACE_WITH_REAL_CODE&state=csrf_state_token",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "auth", "google", "callback"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "google",
+                "callback"
+              ],
               "query": [
                 {
                   "key": "code",
@@ -76,8 +84,16 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/v1/auth/google/callback",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "auth", "google", "callback"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "google",
+                "callback"
+              ]
             },
             "description": "Omits the required `code` query parameter.\n\nExpected response: **400 Bad Request**\n```json\n{ \"error\": { \"code\": \"MISSING_CODE\", \"message\": \"Required query parameter \\\"code\\\" is absent\" } }\n```"
           }
@@ -90,8 +106,16 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/v1/auth/google/callback?error=access_denied",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "auth", "google", "callback"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "google",
+                "callback"
+              ],
               "query": [
                 {
                   "key": "error",
@@ -111,8 +135,16 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/v1/auth/google/callback?code=this_code_is_expired_or_invalid",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "auth", "google", "callback"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "google",
+                "callback"
+              ],
               "query": [
                 {
                   "key": "code",
@@ -132,8 +164,16 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/v1/auth/google/callback?code=4%2F0AX4XfWi_REPLACE_WITH_REAL_CODE",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "auth", "google", "callback"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "google",
+                "callback"
+              ],
               "query": [
                 {
                   "key": "code",
@@ -165,11 +205,94 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/messages",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "messages"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ]
             },
             "description": "Fetches the first page of messages with default limit (20), no label filter, no cursor.\n\nExpected response: **200 OK**\n```json\n{\n  \"messages\": [ /* Message[] ordered newest-first */ ],\n  \"nextCursor\": \"base64EncodedCursor or null\"\n}\n```\nIf `nextCursor` is non-null, pass it as the `cursor` query param on the next request."
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const response = pm.response.json();",
+                  "const messages = response.messages || [];",
+                  "const nextCursor = response.nextCursor;",
+                  "",
+                  "const rows = messages.map(msg => {",
+                  "  const isUnread = msg.labelIds && msg.labelIds.includes('UNREAD');",
+                  "  const labels = (msg.labelIds || [])",
+                  "    .filter(l => l !== 'UNREAD')",
+                  "    .map(l => `<span style=\"background:#e8f0fe;color:#1a73e8;border-radius:4px;padding:1px 6px;font-size:11px;margin-right:3px;\">${l}</span>`)",
+                  "    .join('');",
+                  "  const date = new Date(msg.date).toLocaleString();",
+                  "  const fontWeight = isUnread ? 'bold' : 'normal';",
+                  "  const unreadDot = isUnread",
+                  "    ? '<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:#1a73e8;margin-right:6px;\"></span>'",
+                  "    : '<span style=\"display:inline-block;width:8px;height:8px;margin-right:6px;\"></span>';",
+                  "",
+                  "  return `",
+                  "    <tr style=\"border-bottom:1px solid #f0f0f0;\">",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};white-space:nowrap;\">${unreadDot}${escapeHtml(msg.from)}</td>",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};\">${escapeHtml(msg.subject)}</td>",
+                  "      <td style=\"padding:10px 8px;color:#555;font-size:12px;\">${escapeHtml(msg.snippet ? msg.snippet.substring(0, 80) + '…' : '')}</td>",
+                  "      <td style=\"padding:10px 8px;white-space:nowrap;\">${labels}</td>",
+                  "      <td style=\"padding:10px 8px;color:#888;font-size:12px;white-space:nowrap;\">${date}</td>",
+                  "    </tr>`;",
+                  "}).join('');",
+                  "",
+                  "function escapeHtml(str) {",
+                  "  return String(str || '')",
+                  "    .replace(/&#39;/g, \"'\")",
+                  "    .replace(/&amp;/g, '&')",
+                  "    .replace(/</g, '<')",
+                  "    .replace(/>/g, '>')",
+                  "    .replace(/\"/g, '\"');",
+                  "}",
+                  "",
+                  "const cursorBadge = nextCursor",
+                  "  ? `<div style=\"margin-top:12px;padding:8px 12px;background:#fff8e1;border-left:4px solid #f9a825;font-size:12px;color:#555;\">",
+                  "       <strong>Next cursor:</strong> <code style=\"font-size:11px;\">${nextCursor}</code>",
+                  "     </div>`",
+                  "  : `<div style=\"margin-top:12px;padding:8px 12px;background:#e8f5e9;border-left:4px solid #43a047;font-size:12px;color:#555;\">No more pages — this is the last page.</div>`;",
+                  "",
+                  "const html = `",
+                  "<style>",
+                  "  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 16px; background: #fff; }",
+                  "  table { width: 100%; border-collapse: collapse; font-size: 13px; }",
+                  "  th { text-align: left; padding: 8px; background: #f8f9fa; color: #444; font-weight: 600; border-bottom: 2px solid #e0e0e0; }",
+                  "  tr:hover { background: #f5f5f5; }",
+                  "</style>",
+                  "<h3 style=\"margin:0 0 12px;color:#202124;\">📬 Messages <span style=\"font-size:13px;font-weight:normal;color:#888;\">(${messages.length} shown)</span></h3>",
+                  "<table>",
+                  "  <thead>",
+                  "    <tr>",
+                  "      <th>From</th>",
+                  "      <th>Subject</th>",
+                  "      <th>Snippet</th>",
+                  "      <th>Labels</th>",
+                  "      <th>Date</th>",
+                  "    </tr>",
+                  "  </thead>",
+                  "  <tbody>",
+                  "    ${rows || '<tr><td colspan=\"5\" style=\"padding:20px;text-align:center;color:#888;\">No messages found.</td></tr>'}",
+                  "  </tbody>",
+                  "</table>",
+                  "${cursorBadge}",
+                  "`;",
+                  "",
+                  "pm.visualizer.set(html);"
+                ]
+              }
+            }
+          ]
         },
         {
           "id": "02000001-0000-0000-0000-000000000002",
@@ -184,8 +307,14 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/messages?cursor=REPLACE_WITH_NEXT_CURSOR&limit=20",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "messages"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ],
               "query": [
                 {
                   "key": "cursor",
@@ -199,7 +328,84 @@
               ]
             },
             "description": "Fetches the next page by passing the `nextCursor` from the previous response.\n\nExpected response: **200 OK** — same shape as the first page. `nextCursor` will be `null` when the last page is reached."
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const response = pm.response.json();",
+                  "const messages = response.messages || [];",
+                  "const nextCursor = response.nextCursor;",
+                  "",
+                  "const rows = messages.map(msg => {",
+                  "  const isUnread = msg.labelIds && msg.labelIds.includes('UNREAD');",
+                  "  const labels = (msg.labelIds || [])",
+                  "    .filter(l => l !== 'UNREAD')",
+                  "    .map(l => `<span style=\"background:#e8f0fe;color:#1a73e8;border-radius:4px;padding:1px 6px;font-size:11px;margin-right:3px;\">${l}</span>`)",
+                  "    .join('');",
+                  "  const date = new Date(msg.date).toLocaleString();",
+                  "  const fontWeight = isUnread ? 'bold' : 'normal';",
+                  "  const unreadDot = isUnread",
+                  "    ? '<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:#1a73e8;margin-right:6px;\"></span>'",
+                  "    : '<span style=\"display:inline-block;width:8px;height:8px;margin-right:6px;\"></span>';",
+                  "",
+                  "  return `",
+                  "    <tr style=\"border-bottom:1px solid #f0f0f0;\">",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};white-space:nowrap;\">${unreadDot}${escapeHtml(msg.from)}</td>",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};\">${escapeHtml(msg.subject)}</td>",
+                  "      <td style=\"padding:10px 8px;color:#555;font-size:12px;\">${escapeHtml(msg.snippet ? msg.snippet.substring(0, 80) + '…' : '')}</td>",
+                  "      <td style=\"padding:10px 8px;white-space:nowrap;\">${labels}</td>",
+                  "      <td style=\"padding:10px 8px;color:#888;font-size:12px;white-space:nowrap;\">${date}</td>",
+                  "    </tr>`;",
+                  "}).join('');",
+                  "",
+                  "function escapeHtml(str) {",
+                  "  return String(str || '')",
+                  "    .replace(/&#39;/g, \"'\")",
+                  "    .replace(/&amp;/g, '&')",
+                  "    .replace(/</g, '<')",
+                  "    .replace(/>/g, '>')",
+                  "    .replace(/\"/g, '\"');",
+                  "}",
+                  "",
+                  "const cursorBadge = nextCursor",
+                  "  ? `<div style=\"margin-top:12px;padding:8px 12px;background:#fff8e1;border-left:4px solid #f9a825;font-size:12px;color:#555;\">",
+                  "       <strong>Next cursor:</strong> <code style=\"font-size:11px;\">${nextCursor}</code>",
+                  "     </div>`",
+                  "  : `<div style=\"margin-top:12px;padding:8px 12px;background:#e8f5e9;border-left:4px solid #43a047;font-size:12px;color:#555;\">No more pages — this is the last page.</div>`;",
+                  "",
+                  "const html = `",
+                  "<style>",
+                  "  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 16px; background: #fff; }",
+                  "  table { width: 100%; border-collapse: collapse; font-size: 13px; }",
+                  "  th { text-align: left; padding: 8px; background: #f8f9fa; color: #444; font-weight: 600; border-bottom: 2px solid #e0e0e0; }",
+                  "  tr:hover { background: #f5f5f5; }",
+                  "</style>",
+                  "<h3 style=\"margin:0 0 12px;color:#202124;\">📬 Messages <span style=\"font-size:13px;font-weight:normal;color:#888;\">(${messages.length} shown)</span></h3>",
+                  "<table>",
+                  "  <thead>",
+                  "    <tr>",
+                  "      <th>From</th>",
+                  "      <th>Subject</th>",
+                  "      <th>Snippet</th>",
+                  "      <th>Labels</th>",
+                  "      <th>Date</th>",
+                  "    </tr>",
+                  "  </thead>",
+                  "  <tbody>",
+                  "    ${rows || '<tr><td colspan=\"5\" style=\"padding:20px;text-align:center;color:#888;\">No messages found.</td></tr>'}",
+                  "  </tbody>",
+                  "</table>",
+                  "${cursorBadge}",
+                  "`;",
+                  "",
+                  "pm.visualizer.set(html);"
+                ]
+              }
+            }
+          ]
         },
         {
           "id": "02000001-0000-0000-0000-000000000003",
@@ -214,8 +420,14 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/messages?labelId=INBOX&limit=10",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "messages"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ],
               "query": [
                 {
                   "key": "labelId",
@@ -229,7 +441,84 @@
               ]
             },
             "description": "Fetches messages that carry the `INBOX` label. Any Gmail label ID is accepted (INBOX, SENT, STARRED, UNREAD, SPAM, TRASH, or custom label IDs).\n\nExpected response: **200 OK** — same shape, filtered to messages whose `labelIds` array contains `\"INBOX\"`."
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const response = pm.response.json();",
+                  "const messages = response.messages || [];",
+                  "const nextCursor = response.nextCursor;",
+                  "",
+                  "const rows = messages.map(msg => {",
+                  "  const isUnread = msg.labelIds && msg.labelIds.includes('UNREAD');",
+                  "  const labels = (msg.labelIds || [])",
+                  "    .filter(l => l !== 'UNREAD')",
+                  "    .map(l => `<span style=\"background:#e8f0fe;color:#1a73e8;border-radius:4px;padding:1px 6px;font-size:11px;margin-right:3px;\">${l}</span>`)",
+                  "    .join('');",
+                  "  const date = new Date(msg.date).toLocaleString();",
+                  "  const fontWeight = isUnread ? 'bold' : 'normal';",
+                  "  const unreadDot = isUnread",
+                  "    ? '<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:#1a73e8;margin-right:6px;\"></span>'",
+                  "    : '<span style=\"display:inline-block;width:8px;height:8px;margin-right:6px;\"></span>';",
+                  "",
+                  "  return `",
+                  "    <tr style=\"border-bottom:1px solid #f0f0f0;\">",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};white-space:nowrap;\">${unreadDot}${escapeHtml(msg.from)}</td>",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};\">${escapeHtml(msg.subject)}</td>",
+                  "      <td style=\"padding:10px 8px;color:#555;font-size:12px;\">${escapeHtml(msg.snippet ? msg.snippet.substring(0, 80) + '…' : '')}</td>",
+                  "      <td style=\"padding:10px 8px;white-space:nowrap;\">${labels}</td>",
+                  "      <td style=\"padding:10px 8px;color:#888;font-size:12px;white-space:nowrap;\">${date}</td>",
+                  "    </tr>`;",
+                  "}).join('');",
+                  "",
+                  "function escapeHtml(str) {",
+                  "  return String(str || '')",
+                  "    .replace(/&#39;/g, \"'\")",
+                  "    .replace(/&amp;/g, '&')",
+                  "    .replace(/</g, '<')",
+                  "    .replace(/>/g, '>')",
+                  "    .replace(/\"/g, '\"');",
+                  "}",
+                  "",
+                  "const cursorBadge = nextCursor",
+                  "  ? `<div style=\"margin-top:12px;padding:8px 12px;background:#fff8e1;border-left:4px solid #f9a825;font-size:12px;color:#555;\">",
+                  "       <strong>Next cursor:</strong> <code style=\"font-size:11px;\">${nextCursor}</code>",
+                  "     </div>`",
+                  "  : `<div style=\"margin-top:12px;padding:8px 12px;background:#e8f5e9;border-left:4px solid #43a047;font-size:12px;color:#555;\">No more pages — this is the last page.</div>`;",
+                  "",
+                  "const html = `",
+                  "<style>",
+                  "  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 16px; background: #fff; }",
+                  "  table { width: 100%; border-collapse: collapse; font-size: 13px; }",
+                  "  th { text-align: left; padding: 8px; background: #f8f9fa; color: #444; font-weight: 600; border-bottom: 2px solid #e0e0e0; }",
+                  "  tr:hover { background: #f5f5f5; }",
+                  "</style>",
+                  "<h3 style=\"margin:0 0 12px;color:#202124;\">📬 Messages <span style=\"font-size:13px;font-weight:normal;color:#888;\">(${messages.length} shown)</span></h3>",
+                  "<table>",
+                  "  <thead>",
+                  "    <tr>",
+                  "      <th>From</th>",
+                  "      <th>Subject</th>",
+                  "      <th>Snippet</th>",
+                  "      <th>Labels</th>",
+                  "      <th>Date</th>",
+                  "    </tr>",
+                  "  </thead>",
+                  "  <tbody>",
+                  "    ${rows || '<tr><td colspan=\"5\" style=\"padding:20px;text-align:center;color:#888;\">No messages found.</td></tr>'}",
+                  "  </tbody>",
+                  "</table>",
+                  "${cursorBadge}",
+                  "`;",
+                  "",
+                  "pm.visualizer.set(html);"
+                ]
+              }
+            }
+          ]
         },
         {
           "id": "02000001-0000-0000-0000-000000000004",
@@ -239,11 +528,94 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/v1/messages",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "messages"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ]
             },
             "description": "Sends no `Authorization` header.\n\nExpected response: **401 Unauthorized**\n```json\n{ \"error\": { \"code\": \"UNAUTHORIZED\", \"message\": \"...\" } }\n```\nThe same 401 is returned for a malformed token, an expired token, or a signature mismatch."
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const response = pm.response.json();",
+                  "const messages = response.messages || [];",
+                  "const nextCursor = response.nextCursor;",
+                  "",
+                  "const rows = messages.map(msg => {",
+                  "  const isUnread = msg.labelIds && msg.labelIds.includes('UNREAD');",
+                  "  const labels = (msg.labelIds || [])",
+                  "    .filter(l => l !== 'UNREAD')",
+                  "    .map(l => `<span style=\"background:#e8f0fe;color:#1a73e8;border-radius:4px;padding:1px 6px;font-size:11px;margin-right:3px;\">${l}</span>`)",
+                  "    .join('');",
+                  "  const date = new Date(msg.date).toLocaleString();",
+                  "  const fontWeight = isUnread ? 'bold' : 'normal';",
+                  "  const unreadDot = isUnread",
+                  "    ? '<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:#1a73e8;margin-right:6px;\"></span>'",
+                  "    : '<span style=\"display:inline-block;width:8px;height:8px;margin-right:6px;\"></span>';",
+                  "",
+                  "  return `",
+                  "    <tr style=\"border-bottom:1px solid #f0f0f0;\">",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};white-space:nowrap;\">${unreadDot}${escapeHtml(msg.from)}</td>",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};\">${escapeHtml(msg.subject)}</td>",
+                  "      <td style=\"padding:10px 8px;color:#555;font-size:12px;\">${escapeHtml(msg.snippet ? msg.snippet.substring(0, 80) + '…' : '')}</td>",
+                  "      <td style=\"padding:10px 8px;white-space:nowrap;\">${labels}</td>",
+                  "      <td style=\"padding:10px 8px;color:#888;font-size:12px;white-space:nowrap;\">${date}</td>",
+                  "    </tr>`;",
+                  "}).join('');",
+                  "",
+                  "function escapeHtml(str) {",
+                  "  return String(str || '')",
+                  "    .replace(/&#39;/g, \"'\")",
+                  "    .replace(/&amp;/g, '&')",
+                  "    .replace(/</g, '<')",
+                  "    .replace(/>/g, '>')",
+                  "    .replace(/\"/g, '\"');",
+                  "}",
+                  "",
+                  "const cursorBadge = nextCursor",
+                  "  ? `<div style=\"margin-top:12px;padding:8px 12px;background:#fff8e1;border-left:4px solid #f9a825;font-size:12px;color:#555;\">",
+                  "       <strong>Next cursor:</strong> <code style=\"font-size:11px;\">${nextCursor}</code>",
+                  "     </div>`",
+                  "  : `<div style=\"margin-top:12px;padding:8px 12px;background:#e8f5e9;border-left:4px solid #43a047;font-size:12px;color:#555;\">No more pages — this is the last page.</div>`;",
+                  "",
+                  "const html = `",
+                  "<style>",
+                  "  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 16px; background: #fff; }",
+                  "  table { width: 100%; border-collapse: collapse; font-size: 13px; }",
+                  "  th { text-align: left; padding: 8px; background: #f8f9fa; color: #444; font-weight: 600; border-bottom: 2px solid #e0e0e0; }",
+                  "  tr:hover { background: #f5f5f5; }",
+                  "</style>",
+                  "<h3 style=\"margin:0 0 12px;color:#202124;\">📬 Messages <span style=\"font-size:13px;font-weight:normal;color:#888;\">(${messages.length} shown)</span></h3>",
+                  "<table>",
+                  "  <thead>",
+                  "    <tr>",
+                  "      <th>From</th>",
+                  "      <th>Subject</th>",
+                  "      <th>Snippet</th>",
+                  "      <th>Labels</th>",
+                  "      <th>Date</th>",
+                  "    </tr>",
+                  "  </thead>",
+                  "  <tbody>",
+                  "    ${rows || '<tr><td colspan=\"5\" style=\"padding:20px;text-align:center;color:#888;\">No messages found.</td></tr>'}",
+                  "  </tbody>",
+                  "</table>",
+                  "${cursorBadge}",
+                  "`;",
+                  "",
+                  "pm.visualizer.set(html);"
+                ]
+              }
+            }
+          ]
         },
         {
           "id": "02000001-0000-0000-0000-000000000005",
@@ -259,11 +631,94 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/messages",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "messages"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ]
             },
             "description": "Sends a malformed JWT string that cannot be parsed or verified.\n\nExpected response: **401 Unauthorized**\n```json\n{ \"error\": { \"code\": \"UNAUTHORIZED\", \"message\": \"...\" } }\n```"
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const response = pm.response.json();",
+                  "const messages = response.messages || [];",
+                  "const nextCursor = response.nextCursor;",
+                  "",
+                  "const rows = messages.map(msg => {",
+                  "  const isUnread = msg.labelIds && msg.labelIds.includes('UNREAD');",
+                  "  const labels = (msg.labelIds || [])",
+                  "    .filter(l => l !== 'UNREAD')",
+                  "    .map(l => `<span style=\"background:#e8f0fe;color:#1a73e8;border-radius:4px;padding:1px 6px;font-size:11px;margin-right:3px;\">${l}</span>`)",
+                  "    .join('');",
+                  "  const date = new Date(msg.date).toLocaleString();",
+                  "  const fontWeight = isUnread ? 'bold' : 'normal';",
+                  "  const unreadDot = isUnread",
+                  "    ? '<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:#1a73e8;margin-right:6px;\"></span>'",
+                  "    : '<span style=\"display:inline-block;width:8px;height:8px;margin-right:6px;\"></span>';",
+                  "",
+                  "  return `",
+                  "    <tr style=\"border-bottom:1px solid #f0f0f0;\">",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};white-space:nowrap;\">${unreadDot}${escapeHtml(msg.from)}</td>",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};\">${escapeHtml(msg.subject)}</td>",
+                  "      <td style=\"padding:10px 8px;color:#555;font-size:12px;\">${escapeHtml(msg.snippet ? msg.snippet.substring(0, 80) + '…' : '')}</td>",
+                  "      <td style=\"padding:10px 8px;white-space:nowrap;\">${labels}</td>",
+                  "      <td style=\"padding:10px 8px;color:#888;font-size:12px;white-space:nowrap;\">${date}</td>",
+                  "    </tr>`;",
+                  "}).join('');",
+                  "",
+                  "function escapeHtml(str) {",
+                  "  return String(str || '')",
+                  "    .replace(/&#39;/g, \"'\")",
+                  "    .replace(/&amp;/g, '&')",
+                  "    .replace(/</g, '<')",
+                  "    .replace(/>/g, '>')",
+                  "    .replace(/\"/g, '\"');",
+                  "}",
+                  "",
+                  "const cursorBadge = nextCursor",
+                  "  ? `<div style=\"margin-top:12px;padding:8px 12px;background:#fff8e1;border-left:4px solid #f9a825;font-size:12px;color:#555;\">",
+                  "       <strong>Next cursor:</strong> <code style=\"font-size:11px;\">${nextCursor}</code>",
+                  "     </div>`",
+                  "  : `<div style=\"margin-top:12px;padding:8px 12px;background:#e8f5e9;border-left:4px solid #43a047;font-size:12px;color:#555;\">No more pages — this is the last page.</div>`;",
+                  "",
+                  "const html = `",
+                  "<style>",
+                  "  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 16px; background: #fff; }",
+                  "  table { width: 100%; border-collapse: collapse; font-size: 13px; }",
+                  "  th { text-align: left; padding: 8px; background: #f8f9fa; color: #444; font-weight: 600; border-bottom: 2px solid #e0e0e0; }",
+                  "  tr:hover { background: #f5f5f5; }",
+                  "</style>",
+                  "<h3 style=\"margin:0 0 12px;color:#202124;\">📬 Messages <span style=\"font-size:13px;font-weight:normal;color:#888;\">(${messages.length} shown)</span></h3>",
+                  "<table>",
+                  "  <thead>",
+                  "    <tr>",
+                  "      <th>From</th>",
+                  "      <th>Subject</th>",
+                  "      <th>Snippet</th>",
+                  "      <th>Labels</th>",
+                  "      <th>Date</th>",
+                  "    </tr>",
+                  "  </thead>",
+                  "  <tbody>",
+                  "    ${rows || '<tr><td colspan=\"5\" style=\"padding:20px;text-align:center;color:#888;\">No messages found.</td></tr>'}",
+                  "  </tbody>",
+                  "</table>",
+                  "${cursorBadge}",
+                  "`;",
+                  "",
+                  "pm.visualizer.set(html);"
+                ]
+              }
+            }
+          ]
         },
         {
           "id": "02000001-0000-0000-0000-000000000006",
@@ -278,8 +733,14 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/messages?limit=101",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "messages"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ],
               "query": [
                 {
                   "key": "limit",
@@ -289,7 +750,84 @@
               ]
             },
             "description": "Sends `limit=101` which exceeds the maximum of 100.\n\nExpected response: **422 Unprocessable Entity**\n```json\n{ \"error\": { \"code\": \"INVALID_LIMIT\", \"message\": \"limit must be an integer between 1 and 100\" } }\n```\nAlso triggered by `limit=0` (below minimum of 1) or a non-numeric value like `limit=abc`."
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const response = pm.response.json();",
+                  "const messages = response.messages || [];",
+                  "const nextCursor = response.nextCursor;",
+                  "",
+                  "const rows = messages.map(msg => {",
+                  "  const isUnread = msg.labelIds && msg.labelIds.includes('UNREAD');",
+                  "  const labels = (msg.labelIds || [])",
+                  "    .filter(l => l !== 'UNREAD')",
+                  "    .map(l => `<span style=\"background:#e8f0fe;color:#1a73e8;border-radius:4px;padding:1px 6px;font-size:11px;margin-right:3px;\">${l}</span>`)",
+                  "    .join('');",
+                  "  const date = new Date(msg.date).toLocaleString();",
+                  "  const fontWeight = isUnread ? 'bold' : 'normal';",
+                  "  const unreadDot = isUnread",
+                  "    ? '<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:#1a73e8;margin-right:6px;\"></span>'",
+                  "    : '<span style=\"display:inline-block;width:8px;height:8px;margin-right:6px;\"></span>';",
+                  "",
+                  "  return `",
+                  "    <tr style=\"border-bottom:1px solid #f0f0f0;\">",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};white-space:nowrap;\">${unreadDot}${escapeHtml(msg.from)}</td>",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};\">${escapeHtml(msg.subject)}</td>",
+                  "      <td style=\"padding:10px 8px;color:#555;font-size:12px;\">${escapeHtml(msg.snippet ? msg.snippet.substring(0, 80) + '…' : '')}</td>",
+                  "      <td style=\"padding:10px 8px;white-space:nowrap;\">${labels}</td>",
+                  "      <td style=\"padding:10px 8px;color:#888;font-size:12px;white-space:nowrap;\">${date}</td>",
+                  "    </tr>`;",
+                  "}).join('');",
+                  "",
+                  "function escapeHtml(str) {",
+                  "  return String(str || '')",
+                  "    .replace(/&#39;/g, \"'\")",
+                  "    .replace(/&amp;/g, '&')",
+                  "    .replace(/</g, '<')",
+                  "    .replace(/>/g, '>')",
+                  "    .replace(/\"/g, '\"');",
+                  "}",
+                  "",
+                  "const cursorBadge = nextCursor",
+                  "  ? `<div style=\"margin-top:12px;padding:8px 12px;background:#fff8e1;border-left:4px solid #f9a825;font-size:12px;color:#555;\">",
+                  "       <strong>Next cursor:</strong> <code style=\"font-size:11px;\">${nextCursor}</code>",
+                  "     </div>`",
+                  "  : `<div style=\"margin-top:12px;padding:8px 12px;background:#e8f5e9;border-left:4px solid #43a047;font-size:12px;color:#555;\">No more pages — this is the last page.</div>`;",
+                  "",
+                  "const html = `",
+                  "<style>",
+                  "  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 16px; background: #fff; }",
+                  "  table { width: 100%; border-collapse: collapse; font-size: 13px; }",
+                  "  th { text-align: left; padding: 8px; background: #f8f9fa; color: #444; font-weight: 600; border-bottom: 2px solid #e0e0e0; }",
+                  "  tr:hover { background: #f5f5f5; }",
+                  "</style>",
+                  "<h3 style=\"margin:0 0 12px;color:#202124;\">📬 Messages <span style=\"font-size:13px;font-weight:normal;color:#888;\">(${messages.length} shown)</span></h3>",
+                  "<table>",
+                  "  <thead>",
+                  "    <tr>",
+                  "      <th>From</th>",
+                  "      <th>Subject</th>",
+                  "      <th>Snippet</th>",
+                  "      <th>Labels</th>",
+                  "      <th>Date</th>",
+                  "    </tr>",
+                  "  </thead>",
+                  "  <tbody>",
+                  "    ${rows || '<tr><td colspan=\"5\" style=\"padding:20px;text-align:center;color:#888;\">No messages found.</td></tr>'}",
+                  "  </tbody>",
+                  "</table>",
+                  "${cursorBadge}",
+                  "`;",
+                  "",
+                  "pm.visualizer.set(html);"
+                ]
+              }
+            }
+          ]
         },
         {
           "id": "02000001-0000-0000-0000-000000000007",
@@ -304,8 +842,14 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/messages?limit=abc",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "messages"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ],
               "query": [
                 {
                   "key": "limit",
@@ -315,7 +859,84 @@
               ]
             },
             "description": "Sends `limit=abc`, which is not a valid integer.\n\nExpected response: **422 Unprocessable Entity**\n```json\n{ \"error\": { \"code\": \"INVALID_LIMIT\", \"message\": \"limit must be an integer between 1 and 100\" } }\n```"
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const response = pm.response.json();",
+                  "const messages = response.messages || [];",
+                  "const nextCursor = response.nextCursor;",
+                  "",
+                  "const rows = messages.map(msg => {",
+                  "  const isUnread = msg.labelIds && msg.labelIds.includes('UNREAD');",
+                  "  const labels = (msg.labelIds || [])",
+                  "    .filter(l => l !== 'UNREAD')",
+                  "    .map(l => `<span style=\"background:#e8f0fe;color:#1a73e8;border-radius:4px;padding:1px 6px;font-size:11px;margin-right:3px;\">${l}</span>`)",
+                  "    .join('');",
+                  "  const date = new Date(msg.date).toLocaleString();",
+                  "  const fontWeight = isUnread ? 'bold' : 'normal';",
+                  "  const unreadDot = isUnread",
+                  "    ? '<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:#1a73e8;margin-right:6px;\"></span>'",
+                  "    : '<span style=\"display:inline-block;width:8px;height:8px;margin-right:6px;\"></span>';",
+                  "",
+                  "  return `",
+                  "    <tr style=\"border-bottom:1px solid #f0f0f0;\">",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};white-space:nowrap;\">${unreadDot}${escapeHtml(msg.from)}</td>",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};\">${escapeHtml(msg.subject)}</td>",
+                  "      <td style=\"padding:10px 8px;color:#555;font-size:12px;\">${escapeHtml(msg.snippet ? msg.snippet.substring(0, 80) + '…' : '')}</td>",
+                  "      <td style=\"padding:10px 8px;white-space:nowrap;\">${labels}</td>",
+                  "      <td style=\"padding:10px 8px;color:#888;font-size:12px;white-space:nowrap;\">${date}</td>",
+                  "    </tr>`;",
+                  "}).join('');",
+                  "",
+                  "function escapeHtml(str) {",
+                  "  return String(str || '')",
+                  "    .replace(/&#39;/g, \"'\")",
+                  "    .replace(/&amp;/g, '&')",
+                  "    .replace(/</g, '<')",
+                  "    .replace(/>/g, '>')",
+                  "    .replace(/\"/g, '\"');",
+                  "}",
+                  "",
+                  "const cursorBadge = nextCursor",
+                  "  ? `<div style=\"margin-top:12px;padding:8px 12px;background:#fff8e1;border-left:4px solid #f9a825;font-size:12px;color:#555;\">",
+                  "       <strong>Next cursor:</strong> <code style=\"font-size:11px;\">${nextCursor}</code>",
+                  "     </div>`",
+                  "  : `<div style=\"margin-top:12px;padding:8px 12px;background:#e8f5e9;border-left:4px solid #43a047;font-size:12px;color:#555;\">No more pages — this is the last page.</div>`;",
+                  "",
+                  "const html = `",
+                  "<style>",
+                  "  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 16px; background: #fff; }",
+                  "  table { width: 100%; border-collapse: collapse; font-size: 13px; }",
+                  "  th { text-align: left; padding: 8px; background: #f8f9fa; color: #444; font-weight: 600; border-bottom: 2px solid #e0e0e0; }",
+                  "  tr:hover { background: #f5f5f5; }",
+                  "</style>",
+                  "<h3 style=\"margin:0 0 12px;color:#202124;\">📬 Messages <span style=\"font-size:13px;font-weight:normal;color:#888;\">(${messages.length} shown)</span></h3>",
+                  "<table>",
+                  "  <thead>",
+                  "    <tr>",
+                  "      <th>From</th>",
+                  "      <th>Subject</th>",
+                  "      <th>Snippet</th>",
+                  "      <th>Labels</th>",
+                  "      <th>Date</th>",
+                  "    </tr>",
+                  "  </thead>",
+                  "  <tbody>",
+                  "    ${rows || '<tr><td colspan=\"5\" style=\"padding:20px;text-align:center;color:#888;\">No messages found.</td></tr>'}",
+                  "  </tbody>",
+                  "</table>",
+                  "${cursorBadge}",
+                  "`;",
+                  "",
+                  "pm.visualizer.set(html);"
+                ]
+              }
+            }
+          ]
         },
         {
           "id": "02000001-0000-0000-0000-000000000008",
@@ -330,11 +951,94 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/messages",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "messages"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ]
             },
             "description": "**Server-side condition** — triggered when the stored Google OAuth token was issued without the `https://www.googleapis.com/auth/gmail.modify` scope. Reproduce by authenticating with a deliberately scope-limited token.\n\nExpected response: **403 Forbidden**\n```json\n{ \"error\": { \"code\": \"SCOPE_MISSING\", \"message\": \"...\" } }\n```"
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const response = pm.response.json();",
+                  "const messages = response.messages || [];",
+                  "const nextCursor = response.nextCursor;",
+                  "",
+                  "const rows = messages.map(msg => {",
+                  "  const isUnread = msg.labelIds && msg.labelIds.includes('UNREAD');",
+                  "  const labels = (msg.labelIds || [])",
+                  "    .filter(l => l !== 'UNREAD')",
+                  "    .map(l => `<span style=\"background:#e8f0fe;color:#1a73e8;border-radius:4px;padding:1px 6px;font-size:11px;margin-right:3px;\">${l}</span>`)",
+                  "    .join('');",
+                  "  const date = new Date(msg.date).toLocaleString();",
+                  "  const fontWeight = isUnread ? 'bold' : 'normal';",
+                  "  const unreadDot = isUnread",
+                  "    ? '<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:#1a73e8;margin-right:6px;\"></span>'",
+                  "    : '<span style=\"display:inline-block;width:8px;height:8px;margin-right:6px;\"></span>';",
+                  "",
+                  "  return `",
+                  "    <tr style=\"border-bottom:1px solid #f0f0f0;\">",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};white-space:nowrap;\">${unreadDot}${escapeHtml(msg.from)}</td>",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};\">${escapeHtml(msg.subject)}</td>",
+                  "      <td style=\"padding:10px 8px;color:#555;font-size:12px;\">${escapeHtml(msg.snippet ? msg.snippet.substring(0, 80) + '…' : '')}</td>",
+                  "      <td style=\"padding:10px 8px;white-space:nowrap;\">${labels}</td>",
+                  "      <td style=\"padding:10px 8px;color:#888;font-size:12px;white-space:nowrap;\">${date}</td>",
+                  "    </tr>`;",
+                  "}).join('');",
+                  "",
+                  "function escapeHtml(str) {",
+                  "  return String(str || '')",
+                  "    .replace(/&#39;/g, \"'\")",
+                  "    .replace(/&amp;/g, '&')",
+                  "    .replace(/</g, '<')",
+                  "    .replace(/>/g, '>')",
+                  "    .replace(/\"/g, '\"');",
+                  "}",
+                  "",
+                  "const cursorBadge = nextCursor",
+                  "  ? `<div style=\"margin-top:12px;padding:8px 12px;background:#fff8e1;border-left:4px solid #f9a825;font-size:12px;color:#555;\">",
+                  "       <strong>Next cursor:</strong> <code style=\"font-size:11px;\">${nextCursor}</code>",
+                  "     </div>`",
+                  "  : `<div style=\"margin-top:12px;padding:8px 12px;background:#e8f5e9;border-left:4px solid #43a047;font-size:12px;color:#555;\">No more pages — this is the last page.</div>`;",
+                  "",
+                  "const html = `",
+                  "<style>",
+                  "  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 16px; background: #fff; }",
+                  "  table { width: 100%; border-collapse: collapse; font-size: 13px; }",
+                  "  th { text-align: left; padding: 8px; background: #f8f9fa; color: #444; font-weight: 600; border-bottom: 2px solid #e0e0e0; }",
+                  "  tr:hover { background: #f5f5f5; }",
+                  "</style>",
+                  "<h3 style=\"margin:0 0 12px;color:#202124;\">📬 Messages <span style=\"font-size:13px;font-weight:normal;color:#888;\">(${messages.length} shown)</span></h3>",
+                  "<table>",
+                  "  <thead>",
+                  "    <tr>",
+                  "      <th>From</th>",
+                  "      <th>Subject</th>",
+                  "      <th>Snippet</th>",
+                  "      <th>Labels</th>",
+                  "      <th>Date</th>",
+                  "    </tr>",
+                  "  </thead>",
+                  "  <tbody>",
+                  "    ${rows || '<tr><td colspan=\"5\" style=\"padding:20px;text-align:center;color:#888;\">No messages found.</td></tr>'}",
+                  "  </tbody>",
+                  "</table>",
+                  "${cursorBadge}",
+                  "`;",
+                  "",
+                  "pm.visualizer.set(html);"
+                ]
+              }
+            }
+          ]
         },
         {
           "id": "02000001-0000-0000-0000-000000000009",
@@ -349,11 +1053,94 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/messages",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "messages"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ]
             },
             "description": "**Server-side condition** — triggered when Gmail API responds with HTTP 429. Reproduce by exhausting Gmail API quota in the Google Cloud Console or by running many requests in rapid succession.\n\nExpected response: **429 Too Many Requests**\n```json\n{ \"error\": { \"code\": \"GMAIL_RATE_LIMITED\", \"message\": \"...\" } }\n```"
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const response = pm.response.json();",
+                  "const messages = response.messages || [];",
+                  "const nextCursor = response.nextCursor;",
+                  "",
+                  "const rows = messages.map(msg => {",
+                  "  const isUnread = msg.labelIds && msg.labelIds.includes('UNREAD');",
+                  "  const labels = (msg.labelIds || [])",
+                  "    .filter(l => l !== 'UNREAD')",
+                  "    .map(l => `<span style=\"background:#e8f0fe;color:#1a73e8;border-radius:4px;padding:1px 6px;font-size:11px;margin-right:3px;\">${l}</span>`)",
+                  "    .join('');",
+                  "  const date = new Date(msg.date).toLocaleString();",
+                  "  const fontWeight = isUnread ? 'bold' : 'normal';",
+                  "  const unreadDot = isUnread",
+                  "    ? '<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:#1a73e8;margin-right:6px;\"></span>'",
+                  "    : '<span style=\"display:inline-block;width:8px;height:8px;margin-right:6px;\"></span>';",
+                  "",
+                  "  return `",
+                  "    <tr style=\"border-bottom:1px solid #f0f0f0;\">",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};white-space:nowrap;\">${unreadDot}${escapeHtml(msg.from)}</td>",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};\">${escapeHtml(msg.subject)}</td>",
+                  "      <td style=\"padding:10px 8px;color:#555;font-size:12px;\">${escapeHtml(msg.snippet ? msg.snippet.substring(0, 80) + '…' : '')}</td>",
+                  "      <td style=\"padding:10px 8px;white-space:nowrap;\">${labels}</td>",
+                  "      <td style=\"padding:10px 8px;color:#888;font-size:12px;white-space:nowrap;\">${date}</td>",
+                  "    </tr>`;",
+                  "}).join('');",
+                  "",
+                  "function escapeHtml(str) {",
+                  "  return String(str || '')",
+                  "    .replace(/&#39;/g, \"'\")",
+                  "    .replace(/&amp;/g, '&')",
+                  "    .replace(/</g, '<')",
+                  "    .replace(/>/g, '>')",
+                  "    .replace(/\"/g, '\"');",
+                  "}",
+                  "",
+                  "const cursorBadge = nextCursor",
+                  "  ? `<div style=\"margin-top:12px;padding:8px 12px;background:#fff8e1;border-left:4px solid #f9a825;font-size:12px;color:#555;\">",
+                  "       <strong>Next cursor:</strong> <code style=\"font-size:11px;\">${nextCursor}</code>",
+                  "     </div>`",
+                  "  : `<div style=\"margin-top:12px;padding:8px 12px;background:#e8f5e9;border-left:4px solid #43a047;font-size:12px;color:#555;\">No more pages — this is the last page.</div>`;",
+                  "",
+                  "const html = `",
+                  "<style>",
+                  "  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 16px; background: #fff; }",
+                  "  table { width: 100%; border-collapse: collapse; font-size: 13px; }",
+                  "  th { text-align: left; padding: 8px; background: #f8f9fa; color: #444; font-weight: 600; border-bottom: 2px solid #e0e0e0; }",
+                  "  tr:hover { background: #f5f5f5; }",
+                  "</style>",
+                  "<h3 style=\"margin:0 0 12px;color:#202124;\">📬 Messages <span style=\"font-size:13px;font-weight:normal;color:#888;\">(${messages.length} shown)</span></h3>",
+                  "<table>",
+                  "  <thead>",
+                  "    <tr>",
+                  "      <th>From</th>",
+                  "      <th>Subject</th>",
+                  "      <th>Snippet</th>",
+                  "      <th>Labels</th>",
+                  "      <th>Date</th>",
+                  "    </tr>",
+                  "  </thead>",
+                  "  <tbody>",
+                  "    ${rows || '<tr><td colspan=\"5\" style=\"padding:20px;text-align:center;color:#888;\">No messages found.</td></tr>'}",
+                  "  </tbody>",
+                  "</table>",
+                  "${cursorBadge}",
+                  "`;",
+                  "",
+                  "pm.visualizer.set(html);"
+                ]
+              }
+            }
+          ]
         },
         {
           "id": "02000001-0000-0000-0000-000000000010",
@@ -368,11 +1155,94 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/messages",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "messages"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ]
             },
             "description": "**Server-side condition** — triggered when Gmail API returns any non-2xx status other than 429 (e.g., 500, 503 from Google). Reproduce by revoking the user's OAuth token in the Google Account security settings and then making a request before the server detects the revocation.\n\nExpected response: **502 Bad Gateway**\n```json\n{ \"error\": { \"code\": \"GMAIL_LIST_FAILED\", \"message\": \"...\" } }\n```"
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const response = pm.response.json();",
+                  "const messages = response.messages || [];",
+                  "const nextCursor = response.nextCursor;",
+                  "",
+                  "const rows = messages.map(msg => {",
+                  "  const isUnread = msg.labelIds && msg.labelIds.includes('UNREAD');",
+                  "  const labels = (msg.labelIds || [])",
+                  "    .filter(l => l !== 'UNREAD')",
+                  "    .map(l => `<span style=\"background:#e8f0fe;color:#1a73e8;border-radius:4px;padding:1px 6px;font-size:11px;margin-right:3px;\">${l}</span>`)",
+                  "    .join('');",
+                  "  const date = new Date(msg.date).toLocaleString();",
+                  "  const fontWeight = isUnread ? 'bold' : 'normal';",
+                  "  const unreadDot = isUnread",
+                  "    ? '<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:#1a73e8;margin-right:6px;\"></span>'",
+                  "    : '<span style=\"display:inline-block;width:8px;height:8px;margin-right:6px;\"></span>';",
+                  "",
+                  "  return `",
+                  "    <tr style=\"border-bottom:1px solid #f0f0f0;\">",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};white-space:nowrap;\">${unreadDot}${escapeHtml(msg.from)}</td>",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};\">${escapeHtml(msg.subject)}</td>",
+                  "      <td style=\"padding:10px 8px;color:#555;font-size:12px;\">${escapeHtml(msg.snippet ? msg.snippet.substring(0, 80) + '…' : '')}</td>",
+                  "      <td style=\"padding:10px 8px;white-space:nowrap;\">${labels}</td>",
+                  "      <td style=\"padding:10px 8px;color:#888;font-size:12px;white-space:nowrap;\">${date}</td>",
+                  "    </tr>`;",
+                  "}).join('');",
+                  "",
+                  "function escapeHtml(str) {",
+                  "  return String(str || '')",
+                  "    .replace(/&#39;/g, \"'\")",
+                  "    .replace(/&amp;/g, '&')",
+                  "    .replace(/</g, '<')",
+                  "    .replace(/>/g, '>')",
+                  "    .replace(/\"/g, '\"');",
+                  "}",
+                  "",
+                  "const cursorBadge = nextCursor",
+                  "  ? `<div style=\"margin-top:12px;padding:8px 12px;background:#fff8e1;border-left:4px solid #f9a825;font-size:12px;color:#555;\">",
+                  "       <strong>Next cursor:</strong> <code style=\"font-size:11px;\">${nextCursor}</code>",
+                  "     </div>`",
+                  "  : `<div style=\"margin-top:12px;padding:8px 12px;background:#e8f5e9;border-left:4px solid #43a047;font-size:12px;color:#555;\">No more pages — this is the last page.</div>`;",
+                  "",
+                  "const html = `",
+                  "<style>",
+                  "  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 16px; background: #fff; }",
+                  "  table { width: 100%; border-collapse: collapse; font-size: 13px; }",
+                  "  th { text-align: left; padding: 8px; background: #f8f9fa; color: #444; font-weight: 600; border-bottom: 2px solid #e0e0e0; }",
+                  "  tr:hover { background: #f5f5f5; }",
+                  "</style>",
+                  "<h3 style=\"margin:0 0 12px;color:#202124;\">📬 Messages <span style=\"font-size:13px;font-weight:normal;color:#888;\">(${messages.length} shown)</span></h3>",
+                  "<table>",
+                  "  <thead>",
+                  "    <tr>",
+                  "      <th>From</th>",
+                  "      <th>Subject</th>",
+                  "      <th>Snippet</th>",
+                  "      <th>Labels</th>",
+                  "      <th>Date</th>",
+                  "    </tr>",
+                  "  </thead>",
+                  "  <tbody>",
+                  "    ${rows || '<tr><td colspan=\"5\" style=\"padding:20px;text-align:center;color:#888;\">No messages found.</td></tr>'}",
+                  "  </tbody>",
+                  "</table>",
+                  "${cursorBadge}",
+                  "`;",
+                  "",
+                  "pm.visualizer.set(html);"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -406,8 +1276,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/messages",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "messages"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ]
             },
             "description": "Sends a new email to the specified recipient.\n\nExpected response: **201 Created**\n```json\n{\n  \"message\": { /* full Message object as stored in Supabase */ }\n}\n```"
           }
@@ -438,8 +1314,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/messages",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "messages"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ]
             },
             "description": "Sends a reply in an existing Gmail thread by including `threadId`. Get a real thread ID from `messages[].threadId` in a list response.\n\nExpected response: **201 Created** — same `{ message: Message }` shape. The returned `message.threadId` will match the `threadId` sent."
           }
@@ -470,8 +1352,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/messages",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "messages"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ]
             },
             "description": "Omits the required `to` field. The same error fires if `subject` or `body` is absent, or if any of the three is an empty string.\n\nExpected response: **400 Bad Request**\n```json\n{ \"error\": { \"code\": \"MISSING_FIELDS\", \"message\": \"Request body must include to, subject, and body\" } }\n```"
           }
@@ -502,8 +1390,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/messages",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "messages"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ]
             },
             "description": "Sends `subject` as an empty string. Fields that are present but empty are treated as missing.\n\nExpected response: **400 Bad Request**\n```json\n{ \"error\": { \"code\": \"MISSING_FIELDS\", \"message\": \"to, subject, and body must not be empty strings\" } }\n```"
           }
@@ -534,8 +1428,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/messages",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "messages"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ]
             },
             "description": "Sends `to` as a string that fails RFC 5321 email validation (no `@` domain part).\n\nExpected response: **400 Bad Request**\n```json\n{ \"error\": { \"code\": \"INVALID_RECIPIENT\", \"message\": \"to must be a valid email address\" } }\n```"
           }
@@ -562,8 +1462,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/messages",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "messages"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ]
             },
             "description": "Sends a valid body but omits the `Authorization` header.\n\nExpected response: **401 Unauthorized**\n```json\n{ \"error\": { \"code\": \"UNAUTHORIZED\", \"message\": \"...\" } }\n```"
           }
@@ -594,8 +1500,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/messages",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "messages"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ]
             },
             "description": "Provides a `threadId` that does not exist in Gmail. Gmail API returns 404, which the server maps to this error.\n\nExpected response: **404 Not Found**\n```json\n{ \"error\": { \"code\": \"THREAD_NOT_FOUND\", \"message\": \"...\" } }\n```"
           }
@@ -626,8 +1538,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/messages",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "messages"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ]
             },
             "description": "**Server-side condition** — triggered when the Gmail `messages.send` API responds with 429. Reproduce by exhausting Gmail send quota.\n\nExpected response: **429 Too Many Requests**\n```json\n{ \"error\": { \"code\": \"GMAIL_RATE_LIMITED\", \"message\": \"...\" } }\n```"
           }
@@ -658,8 +1576,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/messages",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "messages"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ]
             },
             "description": "**Server-side condition** — triggered when Gmail `messages.send` returns any non-2xx status other than 429 (e.g., 500 from Google). Reproduce by revoking the OAuth token or using a token with expired credentials.\n\nExpected response: **502 Bad Gateway**\n```json\n{ \"error\": { \"code\": \"GMAIL_SEND_FAILED\", \"message\": \"...\" } }\n```"
           }
@@ -675,9 +1599,43 @@
           "name": "Happy path — mark as read",
           "request": {
             "method": "PATCH",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"},{"key": "Content-Type","value": "application/json"}],
-            "body": {"mode": "raw","raw": "{\n  \"read\": true\n}","options": {"raw": {"language": "json"}}},
-            "url": {"raw": "{{baseUrl}}/api/v1/messages/:id","host": ["{{baseUrl}}"],"path": ["api","v1","messages",":id"],"variable": [{"key": "id","value": "{{messageId}}"}]},
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"read\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}"
+                }
+              ]
+            },
             "description": "Removes the UNREAD label and sets is_read = true.\n\nExpected response: **200 OK**\n```json\n{\"message\": {\"id\": \"...\", \"isRead\": true, \"isStarred\": false, \"status\": \"inbox\"}}\n```"
           }
         },
@@ -686,9 +1644,43 @@
           "name": "Happy path — mark as unread",
           "request": {
             "method": "PATCH",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"},{"key": "Content-Type","value": "application/json"}],
-            "body": {"mode": "raw","raw": "{\n  \"read\": false\n}","options": {"raw": {"language": "json"}}},
-            "url": {"raw": "{{baseUrl}}/api/v1/messages/:id","host": ["{{baseUrl}}"],"path": ["api","v1","messages",":id"],"variable": [{"key": "id","value": "{{messageId}}"}]},
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"read\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}"
+                }
+              ]
+            },
             "description": "Adds the UNREAD label and sets is_read = false.\n\nExpected response: **200 OK** — same shape with `isRead: false`."
           }
         },
@@ -697,9 +1689,43 @@
           "name": "Happy path — star a message",
           "request": {
             "method": "PATCH",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"},{"key": "Content-Type","value": "application/json"}],
-            "body": {"mode": "raw","raw": "{\n  \"starred\": true\n}","options": {"raw": {"language": "json"}}},
-            "url": {"raw": "{{baseUrl}}/api/v1/messages/:id","host": ["{{baseUrl}}"],"path": ["api","v1","messages",":id"],"variable": [{"key": "id","value": "{{messageId}}"}]},
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"starred\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}"
+                }
+              ]
+            },
             "description": "Adds the STARRED label and sets is_starred = true.\n\nExpected response: **200 OK**\n```json\n{\"message\": {\"id\": \"...\", \"isRead\": true, \"isStarred\": true, \"status\": \"inbox\"}}\n```"
           }
         },
@@ -708,9 +1734,43 @@
           "name": "Happy path — unstar a message",
           "request": {
             "method": "PATCH",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"},{"key": "Content-Type","value": "application/json"}],
-            "body": {"mode": "raw","raw": "{\n  \"starred\": false\n}","options": {"raw": {"language": "json"}}},
-            "url": {"raw": "{{baseUrl}}/api/v1/messages/:id","host": ["{{baseUrl}}"],"path": ["api","v1","messages",":id"],"variable": [{"key": "id","value": "{{messageId}}"}]},
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"starred\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}"
+                }
+              ]
+            },
             "description": "Removes the STARRED label and sets is_starred = false."
           }
         },
@@ -719,9 +1779,43 @@
           "name": "Happy path — archive a message",
           "request": {
             "method": "PATCH",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"},{"key": "Content-Type","value": "application/json"}],
-            "body": {"mode": "raw","raw": "{\n  \"archived\": true\n}","options": {"raw": {"language": "json"}}},
-            "url": {"raw": "{{baseUrl}}/api/v1/messages/:id","host": ["{{baseUrl}}"],"path": ["api","v1","messages",":id"],"variable": [{"key": "id","value": "{{messageId}}"}]},
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"archived\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}"
+                }
+              ]
+            },
             "description": "Removes the INBOX label (moves to All Mail). `status` becomes `'archived'`.\n\nExpected response: **200 OK**\n```json\n{\"message\": {\"id\": \"...\", \"isRead\": true, \"isStarred\": false, \"status\": \"archived\"}}\n```"
           }
         },
@@ -730,9 +1824,43 @@
           "name": "Happy path — trash a message",
           "request": {
             "method": "PATCH",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"},{"key": "Content-Type","value": "application/json"}],
-            "body": {"mode": "raw","raw": "{\n  \"trashed\": true\n}","options": {"raw": {"language": "json"}}},
-            "url": {"raw": "{{baseUrl}}/api/v1/messages/:id","host": ["{{baseUrl}}"],"path": ["api","v1","messages",":id"],"variable": [{"key": "id","value": "{{messageId}}"}]},
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"trashed\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}"
+                }
+              ]
+            },
             "description": "Adds the TRASH label and removes INBOX. `status` becomes `'trash'`.\n\nExpected response: **200 OK**\n```json\n{\"message\": {\"id\": \"...\", \"isRead\": true, \"isStarred\": false, \"status\": \"trash\"}}\n```"
           }
         },
@@ -741,9 +1869,43 @@
           "name": "Happy path — untrash a message",
           "request": {
             "method": "PATCH",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"},{"key": "Content-Type","value": "application/json"}],
-            "body": {"mode": "raw","raw": "{\n  \"trashed\": false\n}","options": {"raw": {"language": "json"}}},
-            "url": {"raw": "{{baseUrl}}/api/v1/messages/:id","host": ["{{baseUrl}}"],"path": ["api","v1","messages",":id"],"variable": [{"key": "id","value": "{{messageId}}"}]},
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"trashed\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}"
+                }
+              ]
+            },
             "description": "Removes the TRASH label. `status` becomes `'archived'` (INBOX label is not restored automatically)."
           }
         },
@@ -752,9 +1914,43 @@
           "name": "Happy path — multi-action (read + star in one call)",
           "request": {
             "method": "PATCH",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"},{"key": "Content-Type","value": "application/json"}],
-            "body": {"mode": "raw","raw": "{\n  \"read\": true,\n  \"starred\": true\n}","options": {"raw": {"language": "json"}}},
-            "url": {"raw": "{{baseUrl}}/api/v1/messages/:id","host": ["{{baseUrl}}"],"path": ["api","v1","messages",":id"],"variable": [{"key": "id","value": "{{messageId}}"}]},
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"read\": true,\n  \"starred\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}"
+                }
+              ]
+            },
             "description": "Sends multiple action fields in a single request. All label changes are applied in one `messages.modify` call.\n\nExpected response: **200 OK** with `isRead: true, isStarred: true`."
           }
         },
@@ -763,9 +1959,43 @@
           "name": "INVALID_BODY — empty body",
           "request": {
             "method": "PATCH",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"},{"key": "Content-Type","value": "application/json"}],
-            "body": {"mode": "raw","raw": "{}","options": {"raw": {"language": "json"}}},
-            "url": {"raw": "{{baseUrl}}/api/v1/messages/:id","host": ["{{baseUrl}}"],"path": ["api","v1","messages",":id"],"variable": [{"key": "id","value": "{{messageId}}"}]},
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}"
+                }
+              ]
+            },
             "description": "No recognised boolean fields sent — body contains none of: read, starred, archived, trashed.\n\nExpected response: **400 Bad Request**\n```json\n{ \"error\": { \"code\": \"INVALID_BODY\", \"message\": \"Body must include at least one of: read, starred, archived, trashed\" } }\n```"
           }
         },
@@ -774,9 +2004,43 @@
           "name": "INVALID_BODY — field is string not boolean",
           "request": {
             "method": "PATCH",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"},{"key": "Content-Type","value": "application/json"}],
-            "body": {"mode": "raw","raw": "{\n  \"read\": \"true\"\n}","options": {"raw": {"language": "json"}}},
-            "url": {"raw": "{{baseUrl}}/api/v1/messages/:id","host": ["{{baseUrl}}"],"path": ["api","v1","messages",":id"],"variable": [{"key": "id","value": "{{messageId}}"}]},
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"read\": \"true\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}"
+                }
+              ]
+            },
             "description": "Sends `read` as a JSON string rather than a boolean.\n\nExpected response: **400 Bad Request** — `INVALID_BODY`."
           }
         },
@@ -785,9 +2049,39 @@
           "name": "UNAUTHORIZED — missing Authorization header",
           "request": {
             "method": "PATCH",
-            "header": [{"key": "Content-Type","value": "application/json"}],
-            "body": {"mode": "raw","raw": "{\n  \"read\": true\n}","options": {"raw": {"language": "json"}}},
-            "url": {"raw": "{{baseUrl}}/api/v1/messages/:id","host": ["{{baseUrl}}"],"path": ["api","v1","messages",":id"],"variable": [{"key": "id","value": "{{messageId}}"}]},
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"read\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}"
+                }
+              ]
+            },
             "description": "Omits the Authorization header.\n\nExpected response: **401 Unauthorized** — `UNAUTHORIZED`."
           }
         },
@@ -796,9 +2090,37 @@
           "name": "MESSAGE_NOT_FOUND — non-existent message ID",
           "request": {
             "method": "PATCH",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"},{"key": "Content-Type","value": "application/json"}],
-            "body": {"mode": "raw","raw": "{\n  \"read\": true\n}","options": {"raw": {"language": "json"}}},
-            "url": {"raw": "{{baseUrl}}/api/v1/messages/nonexistent_message_id_000","host": ["{{baseUrl}}"],"path": ["api","v1","messages","nonexistent_message_id_000"]},
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"read\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/nonexistent_message_id_000",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                "nonexistent_message_id_000"
+              ]
+            },
             "description": "ID does not exist in Supabase for this user.\n\nExpected response: **404 Not Found** — `MESSAGE_NOT_FOUND`."
           }
         },
@@ -807,9 +2129,44 @@
           "name": "ALREADY_IN_STATE — all fields already match",
           "request": {
             "method": "PATCH",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"},{"key": "Content-Type","value": "application/json"}],
-            "body": {"mode": "raw","raw": "{\n  \"read\": true\n}","options": {"raw": {"language": "json"}}},
-            "url": {"raw": "{{baseUrl}}/api/v1/messages/:id","host": ["{{baseUrl}}"],"path": ["api","v1","messages",":id"],"variable": [{"key": "id","value": "{{messageId}}","description": "Use a message already marked as read. Run the mark-as-read request first, then re-run this one."}]},
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"read\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}",
+                  "description": "Use a message already marked as read. Run the mark-as-read request first, then re-run this one."
+                }
+              ]
+            },
             "description": "All provided fields already match the current message state.\n\nExpected response: **409 Conflict** — `ALREADY_IN_STATE`."
           }
         },
@@ -818,9 +2175,43 @@
           "name": "GMAIL_RATE_LIMITED — Gmail API 429",
           "request": {
             "method": "PATCH",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"},{"key": "Content-Type","value": "application/json"}],
-            "body": {"mode": "raw","raw": "{\n  \"read\": true\n}","options": {"raw": {"language": "json"}}},
-            "url": {"raw": "{{baseUrl}}/api/v1/messages/:id","host": ["{{baseUrl}}"],"path": ["api","v1","messages",":id"],"variable": [{"key": "id","value": "{{messageId}}"}]},
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"read\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}"
+                }
+              ]
+            },
             "description": "**Server-side condition** — Gmail messages.modify returns 429.\n\nExpected response: **429** — `GMAIL_RATE_LIMITED`."
           }
         },
@@ -829,15 +2220,48 @@
           "name": "GMAIL_MODIFY_FAILED — Gmail API non-2xx",
           "request": {
             "method": "PATCH",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"},{"key": "Content-Type","value": "application/json"}],
-            "body": {"mode": "raw","raw": "{\n  \"read\": true\n}","options": {"raw": {"language": "json"}}},
-            "url": {"raw": "{{baseUrl}}/api/v1/messages/:id","host": ["{{baseUrl}}"],"path": ["api","v1","messages",":id"],"variable": [{"key": "id","value": "{{messageId}}"}]},
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"read\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}"
+                }
+              ]
+            },
             "description": "**Server-side condition** — Gmail messages.modify returns a non-2xx other than 429.\n\nExpected response: **502** — `GMAIL_MODIFY_FAILED`."
           }
         }
       ]
-    }
-  ,
+    },
     {
       "name": "4.8 Draft Create",
       "description": "POST /api/v1/drafts\n\nCreates a Gmail draft via the Gmail drafts API and persists it in Supabase with `status = 'draft'`. The response includes `draftId` (Gmail drafts.id) and the full Message shape.\n\nRequires `Authorization: Bearer {{jwt}}`.",
@@ -847,9 +2271,36 @@
           "name": "Happy path — create new draft",
           "request": {
             "method": "POST",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"},{"key": "Content-Type","value": "application/json"}],
-            "body": {"mode": "raw","raw": "{\n  \"to\": \"recipient@example.com\",\n  \"subject\": \"Draft subject\",\n  \"body\": \"This is a draft message body.\"\n}","options": {"raw": {"language": "json"}}},
-            "url": {"raw": "{{baseUrl}}/api/v1/drafts","host": ["{{baseUrl}}"],"path": ["api","v1","drafts"]},
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"recipient@example.com\",\n  \"subject\": \"Draft subject\",\n  \"body\": \"This is a draft message body.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/drafts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts"
+              ]
+            },
             "description": "Creates a new Gmail draft.\n\nExpected response: **201 Created**\n```json\n{\n  \"message\": { /* Message with status: 'draft', draftId populated */ }\n}\n```\nSave the returned `message.id` as `draftMessageId` and `message.draftId` as `draftId` in the collection variables for update/delete requests."
           }
         },
@@ -858,9 +2309,36 @@
           "name": "Happy path — create draft reply in thread",
           "request": {
             "method": "POST",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"},{"key": "Content-Type","value": "application/json"}],
-            "body": {"mode": "raw","raw": "{\n  \"to\": \"recipient@example.com\",\n  \"subject\": \"Re: Draft subject\",\n  \"body\": \"Draft reply body.\",\n  \"threadId\": \"REPLACE_WITH_REAL_THREAD_ID\"\n}","options": {"raw": {"language": "json"}}},
-            "url": {"raw": "{{baseUrl}}/api/v1/drafts","host": ["{{baseUrl}}"],"path": ["api","v1","drafts"]},
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"recipient@example.com\",\n  \"subject\": \"Re: Draft subject\",\n  \"body\": \"Draft reply body.\",\n  \"threadId\": \"REPLACE_WITH_REAL_THREAD_ID\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/drafts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts"
+              ]
+            },
             "description": "Creates a draft attached to an existing Gmail thread. `threadId` in the response will match the provided value."
           }
         },
@@ -869,9 +2347,36 @@
           "name": "MISSING_FIELDS — to field absent",
           "request": {
             "method": "POST",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"},{"key": "Content-Type","value": "application/json"}],
-            "body": {"mode": "raw","raw": "{\n  \"subject\": \"Draft subject\",\n  \"body\": \"Body text.\"\n}","options": {"raw": {"language": "json"}}},
-            "url": {"raw": "{{baseUrl}}/api/v1/drafts","host": ["{{baseUrl}}"],"path": ["api","v1","drafts"]},
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subject\": \"Draft subject\",\n  \"body\": \"Body text.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/drafts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts"
+              ]
+            },
             "description": "Omits the required `to` field.\n\nExpected response: **400** — `MISSING_FIELDS`."
           }
         },
@@ -880,9 +2385,36 @@
           "name": "INVALID_RECIPIENT — malformed email",
           "request": {
             "method": "POST",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"},{"key": "Content-Type","value": "application/json"}],
-            "body": {"mode": "raw","raw": "{\n  \"to\": \"not-an-email\",\n  \"subject\": \"Draft\",\n  \"body\": \"Body.\"\n}","options": {"raw": {"language": "json"}}},
-            "url": {"raw": "{{baseUrl}}/api/v1/drafts","host": ["{{baseUrl}}"],"path": ["api","v1","drafts"]},
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"not-an-email\",\n  \"subject\": \"Draft\",\n  \"body\": \"Body.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/drafts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts"
+              ]
+            },
             "description": "Expected response: **400** — `INVALID_RECIPIENT`."
           }
         },
@@ -891,9 +2423,32 @@
           "name": "UNAUTHORIZED — missing Authorization header",
           "request": {
             "method": "POST",
-            "header": [{"key": "Content-Type","value": "application/json"}],
-            "body": {"mode": "raw","raw": "{\n  \"to\": \"r@example.com\",\n  \"subject\": \"s\",\n  \"body\": \"b\"\n}","options": {"raw": {"language": "json"}}},
-            "url": {"raw": "{{baseUrl}}/api/v1/drafts","host": ["{{baseUrl}}"],"path": ["api","v1","drafts"]},
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"r@example.com\",\n  \"subject\": \"s\",\n  \"body\": \"b\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/drafts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts"
+              ]
+            },
             "description": "Expected response: **401** — `UNAUTHORIZED`."
           }
         },
@@ -902,9 +2457,36 @@
           "name": "GMAIL_DRAFT_FAILED — Gmail drafts.create non-2xx",
           "request": {
             "method": "POST",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"},{"key": "Content-Type","value": "application/json"}],
-            "body": {"mode": "raw","raw": "{\n  \"to\": \"r@example.com\",\n  \"subject\": \"s\",\n  \"body\": \"b\"\n}","options": {"raw": {"language": "json"}}},
-            "url": {"raw": "{{baseUrl}}/api/v1/drafts","host": ["{{baseUrl}}"],"path": ["api","v1","drafts"]},
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"r@example.com\",\n  \"subject\": \"s\",\n  \"body\": \"b\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/drafts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts"
+              ]
+            },
             "description": "**Server-side condition** — Gmail drafts.create returns non-2xx. Reproduce by revoking the OAuth token.\n\nExpected response: **502** — `GMAIL_DRAFT_FAILED`."
           }
         }
@@ -919,12 +2501,43 @@
           "name": "Happy path — update subject and body",
           "request": {
             "method": "PATCH",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"},{"key": "Content-Type","value": "application/json"}],
-            "body": {"mode": "raw","raw": "{\n  \"subject\": \"Updated subject\",\n  \"body\": \"Updated body text.\"\n}","options": {"raw": {"language": "json"}}},
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subject\": \"Updated subject\",\n  \"body\": \"Updated body text.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/drafts/:id",
-              "host": ["{{baseUrl}}"],"path": ["api","v1","drafts",":id"],
-              "variable": [{"key": "id","value": "{{draftMessageId}}","description": "message.id from the Draft Create response (= Gmail messageId, not draftId)."}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{draftMessageId}}",
+                  "description": "message.id from the Draft Create response (= Gmail messageId, not draftId)."
+                }
+              ]
             },
             "description": "Updates subject and body. Fields not included keep their current values.\n\nExpected response: **200 OK**\n```json\n{\n  \"message\": { /* updated Message, status: 'draft' */ }\n}\n```"
           }
@@ -934,12 +2547,42 @@
           "name": "Happy path — update to field only",
           "request": {
             "method": "PATCH",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"},{"key": "Content-Type","value": "application/json"}],
-            "body": {"mode": "raw","raw": "{\n  \"to\": \"newrecipient@example.com\"\n}","options": {"raw": {"language": "json"}}},
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"newrecipient@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/drafts/:id",
-              "host": ["{{baseUrl}}"],"path": ["api","v1","drafts",":id"],
-              "variable": [{"key": "id","value": "{{draftMessageId}}"}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{draftMessageId}}"
+                }
+              ]
             },
             "description": "Changes only the recipient. Subject and body remain unchanged."
           }
@@ -949,12 +2592,42 @@
           "name": "INVALID_BODY — empty body",
           "request": {
             "method": "PATCH",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"},{"key": "Content-Type","value": "application/json"}],
-            "body": {"mode": "raw","raw": "{}","options": {"raw": {"language": "json"}}},
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/drafts/:id",
-              "host": ["{{baseUrl}}"],"path": ["api","v1","drafts",":id"],
-              "variable": [{"key": "id","value": "{{draftMessageId}}"}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{draftMessageId}}"
+                }
+              ]
             },
             "description": "No fields provided.\n\nExpected response: **400** — `INVALID_BODY`."
           }
@@ -964,12 +2637,42 @@
           "name": "INVALID_RECIPIENT — malformed to value",
           "request": {
             "method": "PATCH",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"},{"key": "Content-Type","value": "application/json"}],
-            "body": {"mode": "raw","raw": "{\n  \"to\": \"not-an-email\"\n}","options": {"raw": {"language": "json"}}},
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"not-an-email\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/drafts/:id",
-              "host": ["{{baseUrl}}"],"path": ["api","v1","drafts",":id"],
-              "variable": [{"key": "id","value": "{{draftMessageId}}"}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{draftMessageId}}"
+                }
+              ]
             },
             "description": "Expected response: **400** — `INVALID_RECIPIENT`."
           }
@@ -979,11 +2682,36 @@
           "name": "DRAFT_NOT_FOUND — non-existent draft ID",
           "request": {
             "method": "PATCH",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"},{"key": "Content-Type","value": "application/json"}],
-            "body": {"mode": "raw","raw": "{\n  \"subject\": \"Updated\"\n}","options": {"raw": {"language": "json"}}},
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subject\": \"Updated\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/drafts/nonexistent_draft_id_000",
-              "host": ["{{baseUrl}}"],"path": ["api","v1","drafts","nonexistent_draft_id_000"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts",
+                "nonexistent_draft_id_000"
+              ]
             },
             "description": "Expected response: **404** — `DRAFT_NOT_FOUND`."
           }
@@ -993,12 +2721,38 @@
           "name": "UNAUTHORIZED — missing Authorization header",
           "request": {
             "method": "PATCH",
-            "header": [{"key": "Content-Type","value": "application/json"}],
-            "body": {"mode": "raw","raw": "{\n  \"subject\": \"Updated\"\n}","options": {"raw": {"language": "json"}}},
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subject\": \"Updated\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/drafts/:id",
-              "host": ["{{baseUrl}}"],"path": ["api","v1","drafts",":id"],
-              "variable": [{"key": "id","value": "{{draftMessageId}}"}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{draftMessageId}}"
+                }
+              ]
             },
             "description": "Expected response: **401** — `UNAUTHORIZED`."
           }
@@ -1014,11 +2768,30 @@
           "name": "Happy path — delete draft",
           "request": {
             "method": "DELETE",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"}],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/drafts/:id",
-              "host": ["{{baseUrl}}"],"path": ["api","v1","drafts",":id"],
-              "variable": [{"key": "id","value": "{{draftMessageId}}","description": "message.id from the Draft Create response. After this request succeeds, the draft is gone from both Gmail and Supabase."}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{draftMessageId}}",
+                  "description": "message.id from the Draft Create response. After this request succeeds, the draft is gone from both Gmail and Supabase."
+                }
+              ]
             },
             "description": "Deletes the draft from Gmail then removes the Supabase row.\n\nExpected response: **204 No Content** — empty body."
           }
@@ -1028,10 +2801,23 @@
           "name": "DRAFT_NOT_FOUND — non-existent ID",
           "request": {
             "method": "DELETE",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"}],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/drafts/nonexistent_draft_id_000",
-              "host": ["{{baseUrl}}"],"path": ["api","v1","drafts","nonexistent_draft_id_000"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts",
+                "nonexistent_draft_id_000"
+              ]
             },
             "description": "Expected response: **404** — `DRAFT_NOT_FOUND`."
           }
@@ -1044,8 +2830,21 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/v1/drafts/:id",
-              "host": ["{{baseUrl}}"],"path": ["api","v1","drafts",":id"],
-              "variable": [{"key": "id","value": "{{draftMessageId}}"}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{draftMessageId}}"
+                }
+              ]
             },
             "description": "Expected response: **401** — `UNAUTHORIZED`."
           }
@@ -1055,11 +2854,29 @@
           "name": "GMAIL_DRAFT_FAILED — Gmail drafts.delete non-2xx",
           "request": {
             "method": "DELETE",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"}],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/drafts/:id",
-              "host": ["{{baseUrl}}"],"path": ["api","v1","drafts",":id"],
-              "variable": [{"key": "id","value": "{{draftMessageId}}"}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{draftMessageId}}"
+                }
+              ]
             },
             "description": "**Server-side condition** — Gmail drafts.delete returns non-2xx. Supabase row is NOT deleted when this fires. Reproduce by revoking the OAuth token.\n\nExpected response: **502** — `GMAIL_DRAFT_FAILED`."
           }
@@ -1075,12 +2892,31 @@
           "name": "Happy path — send draft",
           "request": {
             "method": "POST",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"}],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/drafts/:id/send",
-              "host": ["{{baseUrl}}"],
-              "path": ["api","v1","drafts",":id","send"],
-              "variable": [{"key": "id","value": "{{draftMessageId}}","description": "message.id from the Draft Create response. After this request the draft is gone and a sent message row exists in its place."}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts",
+                ":id",
+                "send"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{draftMessageId}}",
+                  "description": "message.id from the Draft Create response. After this request the draft is gone and a sent message row exists in its place."
+                }
+              ]
             },
             "description": "Sends the draft. No request body required.\n\nExpected response: **200 OK**\n```json\n{\n  \"message\": { /* Message with status: 'sent', draftId: null, gmailId updated */ }\n}\n```"
           }
@@ -1090,11 +2926,24 @@
           "name": "DRAFT_NOT_FOUND — non-existent ID",
           "request": {
             "method": "POST",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"}],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/drafts/nonexistent_draft_id_000/send",
-              "host": ["{{baseUrl}}"],
-              "path": ["api","v1","drafts","nonexistent_draft_id_000","send"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts",
+                "nonexistent_draft_id_000",
+                "send"
+              ]
             },
             "description": "Expected response: **404** — `DRAFT_NOT_FOUND`."
           }
@@ -1107,9 +2956,22 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/v1/drafts/:id/send",
-              "host": ["{{baseUrl}}"],
-              "path": ["api","v1","drafts",":id","send"],
-              "variable": [{"key": "id","value": "{{draftMessageId}}"}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts",
+                ":id",
+                "send"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{draftMessageId}}"
+                }
+              ]
             },
             "description": "Expected response: **401** — `UNAUTHORIZED`."
           }
@@ -1119,12 +2981,30 @@
           "name": "GMAIL_DRAFT_FAILED — drafts.send non-2xx",
           "request": {
             "method": "POST",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"}],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/drafts/:id/send",
-              "host": ["{{baseUrl}}"],
-              "path": ["api","v1","drafts",":id","send"],
-              "variable": [{"key": "id","value": "{{draftMessageId}}"}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts",
+                ":id",
+                "send"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{draftMessageId}}"
+                }
+              ]
             },
             "description": "**Server-side condition** — Gmail `drafts.send` returns non-2xx. Reproduce by revoking the OAuth token. The Supabase row is NOT modified when this fires.\n\nExpected response: **502** — `GMAIL_DRAFT_FAILED`."
           }
@@ -1140,63 +3020,440 @@
           "name": "Happy path — basic search",
           "request": {
             "method": "GET",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"}],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/messages/search?q=hello",
-              "host": ["{{baseUrl}}"],
-              "path": ["api","v1","messages","search"],
-              "query": [{"key": "q","value": "hello","description": "Search string — matched against subject, from, snippet, and to fields."}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "hello",
+                  "description": "Search string — matched against subject, from, snippet, and to fields."
+                }
+              ]
             },
             "description": "Returns messages matching 'hello' in any of the searched fields.\n\nExpected response: **200 OK**\n```json\n{\n  \"messages\": [ /* Message[] ordered newest-first */ ],\n  \"nextCursor\": \"base64cursor or null\"\n}\n```"
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const response = pm.response.json();",
+                  "const messages = response.messages || [];",
+                  "const nextCursor = response.nextCursor;",
+                  "",
+                  "const rows = messages.map(msg => {",
+                  "  const isUnread = msg.labelIds && msg.labelIds.includes('UNREAD');",
+                  "  const labels = (msg.labelIds || [])",
+                  "    .filter(l => l !== 'UNREAD')",
+                  "    .map(l => `<span style=\"background:#e8f0fe;color:#1a73e8;border-radius:4px;padding:1px 6px;font-size:11px;margin-right:3px;\">${l}</span>`)",
+                  "    .join('');",
+                  "  const date = new Date(msg.date).toLocaleString();",
+                  "  const fontWeight = isUnread ? 'bold' : 'normal';",
+                  "  const unreadDot = isUnread",
+                  "    ? '<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:#1a73e8;margin-right:6px;\"></span>'",
+                  "    : '<span style=\"display:inline-block;width:8px;height:8px;margin-right:6px;\"></span>';",
+                  "",
+                  "  return `",
+                  "    <tr style=\"border-bottom:1px solid #f0f0f0;\">",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};white-space:nowrap;\">${unreadDot}${escapeHtml(msg.from)}</td>",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};\">${escapeHtml(msg.subject)}</td>",
+                  "      <td style=\"padding:10px 8px;color:#555;font-size:12px;\">${escapeHtml(msg.snippet ? msg.snippet.substring(0, 80) + '…' : '')}</td>",
+                  "      <td style=\"padding:10px 8px;white-space:nowrap;\">${labels}</td>",
+                  "      <td style=\"padding:10px 8px;color:#888;font-size:12px;white-space:nowrap;\">${date}</td>",
+                  "    </tr>`;",
+                  "}).join('');",
+                  "",
+                  "function escapeHtml(str) {",
+                  "  return String(str || '')",
+                  "    .replace(/&#39;/g, \"'\")",
+                  "    .replace(/&amp;/g, '&')",
+                  "    .replace(/</g, '<')",
+                  "    .replace(/>/g, '>')",
+                  "    .replace(/\"/g, '\"');",
+                  "}",
+                  "",
+                  "const cursorBadge = nextCursor",
+                  "  ? `<div style=\"margin-top:12px;padding:8px 12px;background:#fff8e1;border-left:4px solid #f9a825;font-size:12px;color:#555;\">",
+                  "       <strong>Next cursor:</strong> <code style=\"font-size:11px;\">${nextCursor}</code>",
+                  "     </div>`",
+                  "  : `<div style=\"margin-top:12px;padding:8px 12px;background:#e8f5e9;border-left:4px solid #43a047;font-size:12px;color:#555;\">No more pages — this is the last page.</div>`;",
+                  "",
+                  "const html = `",
+                  "<style>",
+                  "  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 16px; background: #fff; }",
+                  "  table { width: 100%; border-collapse: collapse; font-size: 13px; }",
+                  "  th { text-align: left; padding: 8px; background: #f8f9fa; color: #444; font-weight: 600; border-bottom: 2px solid #e0e0e0; }",
+                  "  tr:hover { background: #f5f5f5; }",
+                  "</style>",
+                  "<h3 style=\"margin:0 0 12px;color:#202124;\">📬 Messages <span style=\"font-size:13px;font-weight:normal;color:#888;\">(${messages.length} shown)</span></h3>",
+                  "<table>",
+                  "  <thead>",
+                  "    <tr>",
+                  "      <th>From</th>",
+                  "      <th>Subject</th>",
+                  "      <th>Snippet</th>",
+                  "      <th>Labels</th>",
+                  "      <th>Date</th>",
+                  "    </tr>",
+                  "  </thead>",
+                  "  <tbody>",
+                  "    ${rows || '<tr><td colspan=\"5\" style=\"padding:20px;text-align:center;color:#888;\">No messages found.</td></tr>'}",
+                  "  </tbody>",
+                  "</table>",
+                  "${cursorBadge}",
+                  "`;",
+                  "",
+                  "pm.visualizer.set(html);"
+                ]
+              }
+            }
+          ]
         },
         {
           "id": "07000001-0000-0000-0000-000000000002",
           "name": "Happy path — search with pagination",
           "request": {
             "method": "GET",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"}],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/messages/search?q=hello&limit=5&cursor=REPLACE_WITH_NEXT_CURSOR",
-              "host": ["{{baseUrl}}"],
-              "path": ["api","v1","messages","search"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                "search"
+              ],
               "query": [
-                {"key": "q","value": "hello"},
-                {"key": "limit","value": "5"},
-                {"key": "cursor","value": "REPLACE_WITH_NEXT_CURSOR","description": "nextCursor from a previous search response."}
+                {
+                  "key": "q",
+                  "value": "hello"
+                },
+                {
+                  "key": "limit",
+                  "value": "5"
+                },
+                {
+                  "key": "cursor",
+                  "value": "REPLACE_WITH_NEXT_CURSOR",
+                  "description": "nextCursor from a previous search response."
+                }
               ]
             },
             "description": "Fetches the next page of search results using a cursor from the previous response."
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const response = pm.response.json();",
+                  "const messages = response.messages || [];",
+                  "const nextCursor = response.nextCursor;",
+                  "",
+                  "const rows = messages.map(msg => {",
+                  "  const isUnread = msg.labelIds && msg.labelIds.includes('UNREAD');",
+                  "  const labels = (msg.labelIds || [])",
+                  "    .filter(l => l !== 'UNREAD')",
+                  "    .map(l => `<span style=\"background:#e8f0fe;color:#1a73e8;border-radius:4px;padding:1px 6px;font-size:11px;margin-right:3px;\">${l}</span>`)",
+                  "    .join('');",
+                  "  const date = new Date(msg.date).toLocaleString();",
+                  "  const fontWeight = isUnread ? 'bold' : 'normal';",
+                  "  const unreadDot = isUnread",
+                  "    ? '<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:#1a73e8;margin-right:6px;\"></span>'",
+                  "    : '<span style=\"display:inline-block;width:8px;height:8px;margin-right:6px;\"></span>';",
+                  "",
+                  "  return `",
+                  "    <tr style=\"border-bottom:1px solid #f0f0f0;\">",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};white-space:nowrap;\">${unreadDot}${escapeHtml(msg.from)}</td>",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};\">${escapeHtml(msg.subject)}</td>",
+                  "      <td style=\"padding:10px 8px;color:#555;font-size:12px;\">${escapeHtml(msg.snippet ? msg.snippet.substring(0, 80) + '…' : '')}</td>",
+                  "      <td style=\"padding:10px 8px;white-space:nowrap;\">${labels}</td>",
+                  "      <td style=\"padding:10px 8px;color:#888;font-size:12px;white-space:nowrap;\">${date}</td>",
+                  "    </tr>`;",
+                  "}).join('');",
+                  "",
+                  "function escapeHtml(str) {",
+                  "  return String(str || '')",
+                  "    .replace(/&#39;/g, \"'\")",
+                  "    .replace(/&amp;/g, '&')",
+                  "    .replace(/</g, '<')",
+                  "    .replace(/>/g, '>')",
+                  "    .replace(/\"/g, '\"');",
+                  "}",
+                  "",
+                  "const cursorBadge = nextCursor",
+                  "  ? `<div style=\"margin-top:12px;padding:8px 12px;background:#fff8e1;border-left:4px solid #f9a825;font-size:12px;color:#555;\">",
+                  "       <strong>Next cursor:</strong> <code style=\"font-size:11px;\">${nextCursor}</code>",
+                  "     </div>`",
+                  "  : `<div style=\"margin-top:12px;padding:8px 12px;background:#e8f5e9;border-left:4px solid #43a047;font-size:12px;color:#555;\">No more pages — this is the last page.</div>`;",
+                  "",
+                  "const html = `",
+                  "<style>",
+                  "  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 16px; background: #fff; }",
+                  "  table { width: 100%; border-collapse: collapse; font-size: 13px; }",
+                  "  th { text-align: left; padding: 8px; background: #f8f9fa; color: #444; font-weight: 600; border-bottom: 2px solid #e0e0e0; }",
+                  "  tr:hover { background: #f5f5f5; }",
+                  "</style>",
+                  "<h3 style=\"margin:0 0 12px;color:#202124;\">📬 Messages <span style=\"font-size:13px;font-weight:normal;color:#888;\">(${messages.length} shown)</span></h3>",
+                  "<table>",
+                  "  <thead>",
+                  "    <tr>",
+                  "      <th>From</th>",
+                  "      <th>Subject</th>",
+                  "      <th>Snippet</th>",
+                  "      <th>Labels</th>",
+                  "      <th>Date</th>",
+                  "    </tr>",
+                  "  </thead>",
+                  "  <tbody>",
+                  "    ${rows || '<tr><td colspan=\"5\" style=\"padding:20px;text-align:center;color:#888;\">No messages found.</td></tr>'}",
+                  "  </tbody>",
+                  "</table>",
+                  "${cursorBadge}",
+                  "`;",
+                  "",
+                  "pm.visualizer.set(html);"
+                ]
+              }
+            }
+          ]
         },
         {
           "id": "07000001-0000-0000-0000-000000000003",
           "name": "MISSING_QUERY — q param absent",
           "request": {
             "method": "GET",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"}],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/messages/search",
-              "host": ["{{baseUrl}}"],
-              "path": ["api","v1","messages","search"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                "search"
+              ]
             },
             "description": "No `q` query parameter provided.\n\nExpected response: **400 Bad Request**\n```json\n{ \"error\": { \"code\": \"MISSING_QUERY\", \"message\": \"Query parameter \\\"q\\\" is required and must not be empty\" } }\n```"
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const response = pm.response.json();",
+                  "const messages = response.messages || [];",
+                  "const nextCursor = response.nextCursor;",
+                  "",
+                  "const rows = messages.map(msg => {",
+                  "  const isUnread = msg.labelIds && msg.labelIds.includes('UNREAD');",
+                  "  const labels = (msg.labelIds || [])",
+                  "    .filter(l => l !== 'UNREAD')",
+                  "    .map(l => `<span style=\"background:#e8f0fe;color:#1a73e8;border-radius:4px;padding:1px 6px;font-size:11px;margin-right:3px;\">${l}</span>`)",
+                  "    .join('');",
+                  "  const date = new Date(msg.date).toLocaleString();",
+                  "  const fontWeight = isUnread ? 'bold' : 'normal';",
+                  "  const unreadDot = isUnread",
+                  "    ? '<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:#1a73e8;margin-right:6px;\"></span>'",
+                  "    : '<span style=\"display:inline-block;width:8px;height:8px;margin-right:6px;\"></span>';",
+                  "",
+                  "  return `",
+                  "    <tr style=\"border-bottom:1px solid #f0f0f0;\">",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};white-space:nowrap;\">${unreadDot}${escapeHtml(msg.from)}</td>",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};\">${escapeHtml(msg.subject)}</td>",
+                  "      <td style=\"padding:10px 8px;color:#555;font-size:12px;\">${escapeHtml(msg.snippet ? msg.snippet.substring(0, 80) + '…' : '')}</td>",
+                  "      <td style=\"padding:10px 8px;white-space:nowrap;\">${labels}</td>",
+                  "      <td style=\"padding:10px 8px;color:#888;font-size:12px;white-space:nowrap;\">${date}</td>",
+                  "    </tr>`;",
+                  "}).join('');",
+                  "",
+                  "function escapeHtml(str) {",
+                  "  return String(str || '')",
+                  "    .replace(/&#39;/g, \"'\")",
+                  "    .replace(/&amp;/g, '&')",
+                  "    .replace(/</g, '<')",
+                  "    .replace(/>/g, '>')",
+                  "    .replace(/\"/g, '\"');",
+                  "}",
+                  "",
+                  "const cursorBadge = nextCursor",
+                  "  ? `<div style=\"margin-top:12px;padding:8px 12px;background:#fff8e1;border-left:4px solid #f9a825;font-size:12px;color:#555;\">",
+                  "       <strong>Next cursor:</strong> <code style=\"font-size:11px;\">${nextCursor}</code>",
+                  "     </div>`",
+                  "  : `<div style=\"margin-top:12px;padding:8px 12px;background:#e8f5e9;border-left:4px solid #43a047;font-size:12px;color:#555;\">No more pages — this is the last page.</div>`;",
+                  "",
+                  "const html = `",
+                  "<style>",
+                  "  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 16px; background: #fff; }",
+                  "  table { width: 100%; border-collapse: collapse; font-size: 13px; }",
+                  "  th { text-align: left; padding: 8px; background: #f8f9fa; color: #444; font-weight: 600; border-bottom: 2px solid #e0e0e0; }",
+                  "  tr:hover { background: #f5f5f5; }",
+                  "</style>",
+                  "<h3 style=\"margin:0 0 12px;color:#202124;\">📬 Messages <span style=\"font-size:13px;font-weight:normal;color:#888;\">(${messages.length} shown)</span></h3>",
+                  "<table>",
+                  "  <thead>",
+                  "    <tr>",
+                  "      <th>From</th>",
+                  "      <th>Subject</th>",
+                  "      <th>Snippet</th>",
+                  "      <th>Labels</th>",
+                  "      <th>Date</th>",
+                  "    </tr>",
+                  "  </thead>",
+                  "  <tbody>",
+                  "    ${rows || '<tr><td colspan=\"5\" style=\"padding:20px;text-align:center;color:#888;\">No messages found.</td></tr>'}",
+                  "  </tbody>",
+                  "</table>",
+                  "${cursorBadge}",
+                  "`;",
+                  "",
+                  "pm.visualizer.set(html);"
+                ]
+              }
+            }
+          ]
         },
         {
           "id": "07000001-0000-0000-0000-000000000004",
           "name": "MISSING_QUERY — q is empty string",
           "request": {
             "method": "GET",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"}],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/messages/search?q=",
-              "host": ["{{baseUrl}}"],
-              "path": ["api","v1","messages","search"],
-              "query": [{"key": "q","value": ""}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": ""
+                }
+              ]
             },
             "description": "`q` is an empty string.\n\nExpected response: **400 Bad Request** — `MISSING_QUERY`."
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const response = pm.response.json();",
+                  "const messages = response.messages || [];",
+                  "const nextCursor = response.nextCursor;",
+                  "",
+                  "const rows = messages.map(msg => {",
+                  "  const isUnread = msg.labelIds && msg.labelIds.includes('UNREAD');",
+                  "  const labels = (msg.labelIds || [])",
+                  "    .filter(l => l !== 'UNREAD')",
+                  "    .map(l => `<span style=\"background:#e8f0fe;color:#1a73e8;border-radius:4px;padding:1px 6px;font-size:11px;margin-right:3px;\">${l}</span>`)",
+                  "    .join('');",
+                  "  const date = new Date(msg.date).toLocaleString();",
+                  "  const fontWeight = isUnread ? 'bold' : 'normal';",
+                  "  const unreadDot = isUnread",
+                  "    ? '<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:#1a73e8;margin-right:6px;\"></span>'",
+                  "    : '<span style=\"display:inline-block;width:8px;height:8px;margin-right:6px;\"></span>';",
+                  "",
+                  "  return `",
+                  "    <tr style=\"border-bottom:1px solid #f0f0f0;\">",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};white-space:nowrap;\">${unreadDot}${escapeHtml(msg.from)}</td>",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};\">${escapeHtml(msg.subject)}</td>",
+                  "      <td style=\"padding:10px 8px;color:#555;font-size:12px;\">${escapeHtml(msg.snippet ? msg.snippet.substring(0, 80) + '…' : '')}</td>",
+                  "      <td style=\"padding:10px 8px;white-space:nowrap;\">${labels}</td>",
+                  "      <td style=\"padding:10px 8px;color:#888;font-size:12px;white-space:nowrap;\">${date}</td>",
+                  "    </tr>`;",
+                  "}).join('');",
+                  "",
+                  "function escapeHtml(str) {",
+                  "  return String(str || '')",
+                  "    .replace(/&#39;/g, \"'\")",
+                  "    .replace(/&amp;/g, '&')",
+                  "    .replace(/</g, '<')",
+                  "    .replace(/>/g, '>')",
+                  "    .replace(/\"/g, '\"');",
+                  "}",
+                  "",
+                  "const cursorBadge = nextCursor",
+                  "  ? `<div style=\"margin-top:12px;padding:8px 12px;background:#fff8e1;border-left:4px solid #f9a825;font-size:12px;color:#555;\">",
+                  "       <strong>Next cursor:</strong> <code style=\"font-size:11px;\">${nextCursor}</code>",
+                  "     </div>`",
+                  "  : `<div style=\"margin-top:12px;padding:8px 12px;background:#e8f5e9;border-left:4px solid #43a047;font-size:12px;color:#555;\">No more pages — this is the last page.</div>`;",
+                  "",
+                  "const html = `",
+                  "<style>",
+                  "  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 16px; background: #fff; }",
+                  "  table { width: 100%; border-collapse: collapse; font-size: 13px; }",
+                  "  th { text-align: left; padding: 8px; background: #f8f9fa; color: #444; font-weight: 600; border-bottom: 2px solid #e0e0e0; }",
+                  "  tr:hover { background: #f5f5f5; }",
+                  "</style>",
+                  "<h3 style=\"margin:0 0 12px;color:#202124;\">📬 Messages <span style=\"font-size:13px;font-weight:normal;color:#888;\">(${messages.length} shown)</span></h3>",
+                  "<table>",
+                  "  <thead>",
+                  "    <tr>",
+                  "      <th>From</th>",
+                  "      <th>Subject</th>",
+                  "      <th>Snippet</th>",
+                  "      <th>Labels</th>",
+                  "      <th>Date</th>",
+                  "    </tr>",
+                  "  </thead>",
+                  "  <tbody>",
+                  "    ${rows || '<tr><td colspan=\"5\" style=\"padding:20px;text-align:center;color:#888;\">No messages found.</td></tr>'}",
+                  "  </tbody>",
+                  "</table>",
+                  "${cursorBadge}",
+                  "`;",
+                  "",
+                  "pm.visualizer.set(html);"
+                ]
+              }
+            }
+          ]
         },
         {
           "id": "07000001-0000-0000-0000-000000000005",
@@ -1206,27 +3463,214 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/v1/messages/search?q=hello",
-              "host": ["{{baseUrl}}"],
-              "path": ["api","v1","messages","search"],
-              "query": [{"key": "q","value": "hello"}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "hello"
+                }
+              ]
             },
             "description": "No Authorization header.\n\nExpected response: **401** — `UNAUTHORIZED`."
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const response = pm.response.json();",
+                  "const messages = response.messages || [];",
+                  "const nextCursor = response.nextCursor;",
+                  "",
+                  "const rows = messages.map(msg => {",
+                  "  const isUnread = msg.labelIds && msg.labelIds.includes('UNREAD');",
+                  "  const labels = (msg.labelIds || [])",
+                  "    .filter(l => l !== 'UNREAD')",
+                  "    .map(l => `<span style=\"background:#e8f0fe;color:#1a73e8;border-radius:4px;padding:1px 6px;font-size:11px;margin-right:3px;\">${l}</span>`)",
+                  "    .join('');",
+                  "  const date = new Date(msg.date).toLocaleString();",
+                  "  const fontWeight = isUnread ? 'bold' : 'normal';",
+                  "  const unreadDot = isUnread",
+                  "    ? '<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:#1a73e8;margin-right:6px;\"></span>'",
+                  "    : '<span style=\"display:inline-block;width:8px;height:8px;margin-right:6px;\"></span>';",
+                  "",
+                  "  return `",
+                  "    <tr style=\"border-bottom:1px solid #f0f0f0;\">",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};white-space:nowrap;\">${unreadDot}${escapeHtml(msg.from)}</td>",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};\">${escapeHtml(msg.subject)}</td>",
+                  "      <td style=\"padding:10px 8px;color:#555;font-size:12px;\">${escapeHtml(msg.snippet ? msg.snippet.substring(0, 80) + '…' : '')}</td>",
+                  "      <td style=\"padding:10px 8px;white-space:nowrap;\">${labels}</td>",
+                  "      <td style=\"padding:10px 8px;color:#888;font-size:12px;white-space:nowrap;\">${date}</td>",
+                  "    </tr>`;",
+                  "}).join('');",
+                  "",
+                  "function escapeHtml(str) {",
+                  "  return String(str || '')",
+                  "    .replace(/&#39;/g, \"'\")",
+                  "    .replace(/&amp;/g, '&')",
+                  "    .replace(/</g, '<')",
+                  "    .replace(/>/g, '>')",
+                  "    .replace(/\"/g, '\"');",
+                  "}",
+                  "",
+                  "const cursorBadge = nextCursor",
+                  "  ? `<div style=\"margin-top:12px;padding:8px 12px;background:#fff8e1;border-left:4px solid #f9a825;font-size:12px;color:#555;\">",
+                  "       <strong>Next cursor:</strong> <code style=\"font-size:11px;\">${nextCursor}</code>",
+                  "     </div>`",
+                  "  : `<div style=\"margin-top:12px;padding:8px 12px;background:#e8f5e9;border-left:4px solid #43a047;font-size:12px;color:#555;\">No more pages — this is the last page.</div>`;",
+                  "",
+                  "const html = `",
+                  "<style>",
+                  "  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 16px; background: #fff; }",
+                  "  table { width: 100%; border-collapse: collapse; font-size: 13px; }",
+                  "  th { text-align: left; padding: 8px; background: #f8f9fa; color: #444; font-weight: 600; border-bottom: 2px solid #e0e0e0; }",
+                  "  tr:hover { background: #f5f5f5; }",
+                  "</style>",
+                  "<h3 style=\"margin:0 0 12px;color:#202124;\">📬 Messages <span style=\"font-size:13px;font-weight:normal;color:#888;\">(${messages.length} shown)</span></h3>",
+                  "<table>",
+                  "  <thead>",
+                  "    <tr>",
+                  "      <th>From</th>",
+                  "      <th>Subject</th>",
+                  "      <th>Snippet</th>",
+                  "      <th>Labels</th>",
+                  "      <th>Date</th>",
+                  "    </tr>",
+                  "  </thead>",
+                  "  <tbody>",
+                  "    ${rows || '<tr><td colspan=\"5\" style=\"padding:20px;text-align:center;color:#888;\">No messages found.</td></tr>'}",
+                  "  </tbody>",
+                  "</table>",
+                  "${cursorBadge}",
+                  "`;",
+                  "",
+                  "pm.visualizer.set(html);"
+                ]
+              }
+            }
+          ]
         },
         {
           "id": "07000001-0000-0000-0000-000000000006",
           "name": "INVALID_LIMIT — limit out of range",
           "request": {
             "method": "GET",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"}],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/messages/search?q=hello&limit=0",
-              "host": ["{{baseUrl}}"],
-              "path": ["api","v1","messages","search"],
-              "query": [{"key": "q","value": "hello"},{"key": "limit","value": "0"}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "hello"
+                },
+                {
+                  "key": "limit",
+                  "value": "0"
+                }
+              ]
             },
             "description": "`limit=0` is below the minimum of 1.\n\nExpected response: **422** — `INVALID_LIMIT`."
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const response = pm.response.json();",
+                  "const messages = response.messages || [];",
+                  "const nextCursor = response.nextCursor;",
+                  "",
+                  "const rows = messages.map(msg => {",
+                  "  const isUnread = msg.labelIds && msg.labelIds.includes('UNREAD');",
+                  "  const labels = (msg.labelIds || [])",
+                  "    .filter(l => l !== 'UNREAD')",
+                  "    .map(l => `<span style=\"background:#e8f0fe;color:#1a73e8;border-radius:4px;padding:1px 6px;font-size:11px;margin-right:3px;\">${l}</span>`)",
+                  "    .join('');",
+                  "  const date = new Date(msg.date).toLocaleString();",
+                  "  const fontWeight = isUnread ? 'bold' : 'normal';",
+                  "  const unreadDot = isUnread",
+                  "    ? '<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:#1a73e8;margin-right:6px;\"></span>'",
+                  "    : '<span style=\"display:inline-block;width:8px;height:8px;margin-right:6px;\"></span>';",
+                  "",
+                  "  return `",
+                  "    <tr style=\"border-bottom:1px solid #f0f0f0;\">",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};white-space:nowrap;\">${unreadDot}${escapeHtml(msg.from)}</td>",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};\">${escapeHtml(msg.subject)}</td>",
+                  "      <td style=\"padding:10px 8px;color:#555;font-size:12px;\">${escapeHtml(msg.snippet ? msg.snippet.substring(0, 80) + '…' : '')}</td>",
+                  "      <td style=\"padding:10px 8px;white-space:nowrap;\">${labels}</td>",
+                  "      <td style=\"padding:10px 8px;color:#888;font-size:12px;white-space:nowrap;\">${date}</td>",
+                  "    </tr>`;",
+                  "}).join('');",
+                  "",
+                  "function escapeHtml(str) {",
+                  "  return String(str || '')",
+                  "    .replace(/&#39;/g, \"'\")",
+                  "    .replace(/&amp;/g, '&')",
+                  "    .replace(/</g, '<')",
+                  "    .replace(/>/g, '>')",
+                  "    .replace(/\"/g, '\"');",
+                  "}",
+                  "",
+                  "const cursorBadge = nextCursor",
+                  "  ? `<div style=\"margin-top:12px;padding:8px 12px;background:#fff8e1;border-left:4px solid #f9a825;font-size:12px;color:#555;\">",
+                  "       <strong>Next cursor:</strong> <code style=\"font-size:11px;\">${nextCursor}</code>",
+                  "     </div>`",
+                  "  : `<div style=\"margin-top:12px;padding:8px 12px;background:#e8f5e9;border-left:4px solid #43a047;font-size:12px;color:#555;\">No more pages — this is the last page.</div>`;",
+                  "",
+                  "const html = `",
+                  "<style>",
+                  "  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 16px; background: #fff; }",
+                  "  table { width: 100%; border-collapse: collapse; font-size: 13px; }",
+                  "  th { text-align: left; padding: 8px; background: #f8f9fa; color: #444; font-weight: 600; border-bottom: 2px solid #e0e0e0; }",
+                  "  tr:hover { background: #f5f5f5; }",
+                  "</style>",
+                  "<h3 style=\"margin:0 0 12px;color:#202124;\">📬 Messages <span style=\"font-size:13px;font-weight:normal;color:#888;\">(${messages.length} shown)</span></h3>",
+                  "<table>",
+                  "  <thead>",
+                  "    <tr>",
+                  "      <th>From</th>",
+                  "      <th>Subject</th>",
+                  "      <th>Snippet</th>",
+                  "      <th>Labels</th>",
+                  "      <th>Date</th>",
+                  "    </tr>",
+                  "  </thead>",
+                  "  <tbody>",
+                  "    ${rows || '<tr><td colspan=\"5\" style=\"padding:20px;text-align:center;color:#888;\">No messages found.</td></tr>'}",
+                  "  </tbody>",
+                  "</table>",
+                  "${cursorBadge}",
+                  "`;",
+                  "",
+                  "pm.visualizer.set(html);"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -1239,12 +3683,30 @@
           "name": "Happy path — fetch thread",
           "request": {
             "method": "GET",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"}],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/threads/:threadId",
-              "host": ["{{baseUrl}}"],
-              "path": ["api","v1","threads",":threadId"],
-              "variable": [{"key": "threadId","value": "{{threadId}}","description": "Gmail thread ID — get from messages[].threadId in a list response."}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "threads",
+                ":threadId"
+              ],
+              "variable": [
+                {
+                  "key": "threadId",
+                  "value": "{{threadId}}",
+                  "description": "Gmail thread ID — get from messages[].threadId in a list response."
+                }
+              ]
             },
             "description": "Fetches all synced messages in the thread, oldest-first.\n\nExpected response: **200 OK**\n```json\n{\n  \"threadId\": \"...\",\n  \"messages\": [ /* Message[] ordered oldest-first */ ]\n}\n```"
           }
@@ -1257,9 +3719,21 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/v1/threads/:threadId",
-              "host": ["{{baseUrl}}"],
-              "path": ["api","v1","threads",":threadId"],
-              "variable": [{"key": "threadId","value": "{{threadId}}"}]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "threads",
+                ":threadId"
+              ],
+              "variable": [
+                {
+                  "key": "threadId",
+                  "value": "{{threadId}}"
+                }
+              ]
             },
             "description": "No Authorization header.\n\nExpected response: **401** — `UNAUTHORIZED`."
           }
@@ -1269,11 +3743,23 @@
           "name": "THREAD_NOT_FOUND — no messages for this thread",
           "request": {
             "method": "GET",
-            "header": [{"key": "Authorization","value": "Bearer {{jwt}}"}],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/threads/nonexistent_thread_id_000",
-              "host": ["{{baseUrl}}"],
-              "path": ["api","v1","threads","nonexistent_thread_id_000"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "threads",
+                "nonexistent_thread_id_000"
+              ]
             },
             "description": "Thread ID that exists in Gmail but has no messages synced for this user.\n\nExpected response: **404** — `THREAD_NOT_FOUND`."
           }
