@@ -213,13 +213,9 @@ export function rowToMessage(row: DbMessageRow): Message {
 export async function upsertMessages(
   messages: Array<Omit<Message, 'id' | 'createdAt' | 'updatedAt'>>,
 ): Promise<void> {
-  // Cast required: status and draft_id are new columns not yet reflected
-  // in the Supabase generated types. They will be present once the schema
-  // migration runs (see migrations/ on the schema branch).
   const { error } = await getClient()
     .from('messages')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .upsert(messages.map(toRow) as any[], { onConflict: 'gmail_id' });
+    .upsert(messages.map(toRow), { onConflict: 'gmail_id' });
 
   if (error) {
     throw new ProviderError('SYNC_UPSERT_FAILED', error.message, error);

@@ -45,6 +45,7 @@ export type Database = {
           body_plain: string | null
           created_at: string
           date: string
+          draft_id: string | null
           from_address: string
           gmail_id: string
           id: string
@@ -52,6 +53,7 @@ export type Database = {
           is_starred: boolean
           label_ids: string[]
           snippet: string
+          status: string
           subject: string
           thread_id: string
           to_address: string
@@ -63,6 +65,7 @@ export type Database = {
           body_plain?: string | null
           created_at?: string
           date?: string
+          draft_id?: string | null
           from_address: string
           gmail_id: string
           id?: string
@@ -70,6 +73,7 @@ export type Database = {
           is_starred?: boolean
           label_ids?: string[]
           snippet?: string
+          status?: string
           subject?: string
           thread_id: string
           to_address: string
@@ -81,6 +85,7 @@ export type Database = {
           body_plain?: string | null
           created_at?: string
           date?: string
+          draft_id?: string | null
           from_address?: string
           gmail_id?: string
           id?: string
@@ -88,6 +93,7 @@ export type Database = {
           is_starred?: boolean
           label_ids?: string[]
           snippet?: string
+          status?: string
           subject?: string
           thread_id?: string
           to_address?: string

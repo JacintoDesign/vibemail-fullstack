@@ -64,11 +64,7 @@ export async function upsertMessage(
   msg: Omit<Message, 'id' | 'createdAt' | 'updatedAt'>,
 ): Promise<void> {
   const ms = Number(msg.internalDate);
-  // Cast required: status and draft_id are new columns not yet reflected in
-  // the Supabase generated types. They will be present once the schema
-  // migration runs (see migrations/ on the schema branch).
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const row: any = {
+  const row: TablesInsert<'messages'> = {
     user_id:      msg.userId,
     gmail_id:     msg.gmailId,
     thread_id:    msg.threadId,
