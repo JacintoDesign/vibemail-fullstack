@@ -1,0 +1,218 @@
+/* VibeMail Glass — design tokens.
+   Reconstructs the absent `_ds/.../styles.css` token layer from the inline
+   :root overrides in `design-handoff/VibeMail Client.html`, the rules in
+   docs/design-context, and how each token is used across the components.
+
+   First-paint defaults are dark · green · medium glass · compact density —
+   the same values `lib/shell-vars.ts` re-derives and writes onto
+   documentElement at runtime once the user's settings load. */
+
+:root {
+  /* ── Typography ─────────────────────────────────────────────── */
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono",
+    Menlo, Consolas, "Liberation Mono", monospace;
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-bold: 700;
+  --lh-body: 1.6;
+  --tracking-label: 0.08em;
+
+  /* Type scale — one factor (--vm-font-scale) drives every role;
+     --vm-mobile-scale shrinks a notch on vertical phones. */
+  --vm-font-scale: 1;
+  --vm-mobile-scale: 1;
+  --text-display: calc(38px * var(--vm-font-scale) * var(--vm-mobile-scale));
+  --text-title: calc(22px * var(--vm-font-scale) * var(--vm-mobile-scale));
+  --text-heading: calc(16px * var(--vm-font-scale) * var(--vm-mobile-scale));
+  --text-body: calc(14px * var(--vm-font-scale) * var(--vm-mobile-scale));
+  --text-row: calc(13px * var(--vm-font-scale) * var(--vm-mobile-scale));
+  --text-caption: calc(12px * var(--vm-font-scale) * var(--vm-mobile-scale));
+  --text-micro: calc(11px * var(--vm-font-scale) * var(--vm-mobile-scale));
+
+  /* ── Radii ──────────────────────────────────────────────────── */
+  --radius-sm: 7px;
+  --radius-md: 12px;
+  --radius-full: 999px;
+
+  /* ── Motion ─────────────────────────────────────────────────── */
+  --dur-fast: 0.12s;
+  --dur-standard: 0.2s;
+  --dur-slow: 0.32s;
+  --ease-standard: cubic-bezier(0.2, 0.85, 0.3, 1);
+  --ease-out: cubic-bezier(0.4, 0.9, 0.6, 1);
+
+  /* ── Control sizing ─────────────────────────────────────────── */
+  --control-h: 36px;
+  --control-h-lg: 44px;
+  --surface-input: rgba(255, 255, 255, 0.05);
+
+  /* ── Canvas / surface (dark charcoal — overrides DS navy) ───── */
+  --navy-deep: #080808;
+  --navy: #111111;
+  --navy-raised: #1c1c1e;
+  --canvas: radial-gradient(120% 120% at 80% -10%, #1e1e1e 0%, #111111 42%, #080808 100%);
+
+  /* ── Text (dark mode: +10pp lightness) ──────────────────────── */
+  --text-primary: oklch(from #fdfcfc calc(l + 0.1) c h);
+  --cream: oklch(from #fdfcfc calc(l + 0.1) c h);
+  --text-secondary: oklch(from #c8c9d4 calc(l + 0.1) c h);
+  --text-body-ink: oklch(from #a6a8b6 calc(l + 0.1) c h);
+  --text-muted: oklch(from #9a9898 calc(l + 0.1) c h);
+  --text-faint: oklch(from #6e6e73 calc(l + 0.1) c h);
+  --text-disabled: oklch(from #565760 calc(l + 0.1) c h);
+
+  /* ── Glass surfaces (medium, white-on-navy) ─────────────────── */
+  --glass-0: rgba(255, 255, 255, 0.05);
+  --glass-1: rgba(255, 255, 255, 0.08);
+  --glass-2: rgba(255, 255, 255, 0.11);
+  --glass-hover: rgba(255, 255, 255, 0.14);
+  --glass-active: rgba(255, 255, 255, 0.05);
+  --glass-drawer: rgba(20, 20, 20, 0.82);
+  --glass-scrim: rgba(8, 8, 8, 0.55);
+
+  /* Backdrop-filter blur ramps (medium) */
+  --glass-blur-0: blur(20px) saturate(140%);
+  --glass-blur-1: blur(28px) saturate(150%);
+  --glass-blur-2: blur(36px) saturate(160%);
+  --glass-blur-3: blur(40px) saturate(170%);
+
+  /* ── Borders & sheen ────────────────────────────────────────── */
+  --border-hairline: rgba(255, 255, 255, 0.1);
+  --border-default: rgba(255, 255, 255, 0.14);
+  --border-strong: rgba(255, 255, 255, 0.22);
+  --border-top-sheen: rgba(255, 255, 255, 0.12);
+
+  /* ── Shadows ────────────────────────────────────────────────── */
+  --shadow-0: 0 2px 8px rgba(0, 0, 0, 0.28);
+  --shadow-1: 0 4px 16px rgba(0, 0, 0, 0.34);
+  --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.42);
+  --shadow-3: 0 16px 48px rgba(0, 0, 0, 0.52);
+  --shadow-drawer: 0 -16px 48px rgba(0, 0, 0, 0.5);
+
+  /* ── Accent (green default) ─────────────────────────────────── */
+  --accent: #30d158;
+  --accent-hover: #4fe06f;
+  --accent-active: #25a847;
+  --accent-soft: rgba(48, 209, 88, 0.16);
+  --accent-glow: rgba(48, 209, 88, 0.45);
+  --on-accent: #06210f;
+  --dot-unread: #30d158;
+  --star-active: #30d158;
+  --star-idle: rgba(255, 255, 255, 0.22);
+
+  /* ── Semantic ───────────────────────────────────────────────── */
+  --success: #30d158;
+  --warning: #ff9f0a;
+  --warning-hover: #d77f00;
+  --danger: #ff453a;
+  --danger-hover: #d70015;
+  --danger-soft: rgba(255, 69, 58, 0.12);
+
+  /* ── Density (compact default) ──────────────────────────────── */
+  --row-h: 52px;
+  --card-pad: 12px 14px;
+  --card-gap: 7px;
+
+  /* ── Animated background blobs ──────────────────────────────── */
+  --vm-blob-a: rgba(48, 209, 88, 0.1);
+  --vm-blob-b: rgba(64, 36, 120, 0.22);
+}
+
+@media (max-width: 700px) {
+  :root {
+    --vm-mobile-scale: 0.75;
+  }
+}
+
+/* ── Light theme — token overrides only; same glass vocabulary, inverted.
+   Canvas returns to brand cream; glass becomes navy-opacity over cream;
+   the lit border flips to a navy hairline + white top sheen.
+   Ported verbatim from the handoff, with accent re-pinned to the green ramp
+   (light variants) so the brand colour is correct before shell-vars runs. */
+html[data-theme="light"] {
+  --canvas: radial-gradient(circle 260px at 0% 0%, rgba(255, 255, 255, 0.95) 0%, transparent 100%),
+    radial-gradient(ellipse 68% 52% at 100% 0%, rgba(48, 209, 88, 0.1) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 60% at 2% 100%, rgba(48, 209, 88, 0.07) 0%, transparent 50%),
+    radial-gradient(ellipse 38% 38% at 98% 98%, rgba(25, 175, 65, 0.06) 0%, transparent 45%),
+    linear-gradient(135deg, #f9fdfb 0%, #f3faf6 50%, #edf7f1 100%);
+  --navy: #fdfcfc;
+  --navy-deep: #edebe7;
+  --navy-raised: #ffffff;
+
+  /* Text: −10pp lightness in light mode */
+  --cream: oklch(from #14181f calc(l - 0.1) c h);
+  --text-primary: oklch(from #14181f calc(l - 0.1) c h);
+  --text-secondary: oklch(from #3a4051 calc(l - 0.1) c h);
+  --text-body-ink: oklch(from #4a5065 calc(l - 0.1) c h);
+  --text-muted: oklch(from #6b6f7c calc(l - 0.1) c h);
+  --text-faint: oklch(from #8e919c calc(l - 0.1) c h);
+  --text-disabled: oklch(from #b3b5bd calc(l - 0.1) c h);
+
+  --glass-0: rgba(16, 22, 39, 0.04);
+  --glass-1: rgba(16, 22, 39, 0.06);
+  --glass-2: rgba(16, 22, 39, 0.09);
+  --glass-hover: rgba(16, 22, 39, 0.11);
+  --glass-active: rgba(16, 22, 39, 0.05);
+  --glass-drawer: rgba(253, 252, 252, 0.86);
+  --glass-scrim: rgba(16, 22, 39, 0.3);
+
+  --border-hairline: rgba(16, 22, 39, 0.1);
+  --border-default: rgba(16, 22, 39, 0.14);
+  --border-strong: rgba(16, 22, 39, 0.24);
+  --border-top-sheen: rgba(255, 255, 255, 0.85);
+
+  /* Accent — green ramp, light variants */
+  --accent: #30d158;
+  --accent-hover: #28b34c;
+  --accent-active: #1f9440;
+  --accent-soft: rgba(48, 209, 88, 0.14);
+  --accent-glow: rgba(48, 209, 88, 0.32);
+  --on-accent: #f6fff9;
+
+  --success: #1f9e47;
+  --warning: #c77700;
+  --warning-hover: #a36200;
+  --danger: #d70015;
+  --danger-hover: #b00012;
+  --danger-soft: rgba(215, 0, 21, 0.1);
+
+  --shadow-0: 0 2px 8px rgba(16, 22, 39, 0.08);
+  --shadow-1: 0 4px 16px rgba(16, 22, 39, 0.1);
+  --shadow-2: 0 8px 24px rgba(16, 22, 39, 0.14);
+  --shadow-3: 0 16px 48px rgba(16, 22, 39, 0.2);
+  --shadow-drawer: 0 -16px 48px rgba(16, 22, 39, 0.18);
+
+  --star-idle: rgba(16, 22, 39, 0.22);
+  --surface-input: rgba(16, 22, 39, 0.04);
+
+  --vm-blob-a: rgba(48, 209, 88, 0.1);
+  --vm-blob-b: rgba(25, 160, 65, 0.08);
+}
+
+/* ── Implementation flag 2: mobile glass-card border bump ──────────────────
+   At the mobile breakpoint, raise the glass-card border to 20–25% white so
+   cards stay legible against the smaller, busier viewport. Light theme keeps
+   its navy hairline, bumped proportionally. */
+@media (max-width: 700px) {
+  :root {
+    --border-hairline: rgba(255, 255, 255, 0.2);
+    --border-default: rgba(255, 255, 255, 0.25);
+  }
+  html[data-theme="light"] {
+    --border-hairline: rgba(16, 22, 39, 0.2);
+    --border-default: rgba(16, 22, 39, 0.24);
+  }
+}
+
+/* ── Implementation flag 1 (first-paint fallback): reduced-motion blur cap ──
+   Cap backdrop-filter blur to 8px on all glass surfaces. shell-vars.ts also
+   applies this cap to the values it writes inline at runtime (inline styles
+   would otherwise beat this rule); this block covers the pre-hydration paint. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --glass-blur-0: blur(8px) saturate(140%);
+    --glass-blur-1: blur(8px) saturate(150%);
+    --glass-blur-2: blur(8px) saturate(160%);
+    --glass-blur-3: blur(8px) saturate(170%);
+  }
+}

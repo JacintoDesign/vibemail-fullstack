@@ -1,0 +1,55 @@
+// Shared types for the VibeMail front end.
+// `Message` is a superset of the CONTRACT.md §3 shape plus the UI-display
+// conveniences the design-handoff components read (senderName/senderEmail
+// parsed from `from`, a short `time` label, display `labels`, and a rendered
+// `thread[]`). Phase 2 maps the live API response onto this same shape.
+
+import type { CSSProperties } from "react";
+
+export type MessageStatus = "inbox" | "sent" | "draft" | "archived" | "trash";
+
+export interface ThreadMsg {
+  from: string;
+  email: string;
+  date: string;
+  body: string;
+}
+
+export interface Message {
+  // ── CONTRACT core ──────────────────────────────────────────────
+  id: string;
+  threadId: string;
+  from: string;
+  to: string;
+  subject: string;
+  date: string;
+  snippet: string;
+  bodyPlain?: string | null;
+  labelIds: string[];
+  isRead: boolean;
+  isStarred: boolean;
+  status: MessageStatus;
+  draftId: string | null;
+
+  // ── UI conveniences ────────────────────────────────────────────
+  senderName: string;
+  senderEmail: string;
+  time: string;
+  labels: string[];
+  hasAttachment: boolean;
+  thread: ThreadMsg[];
+}
+
+export type Label = string;
+
+export type Folder =
+  | "all"
+  | "starred"
+  | "sent"
+  | "drafts"
+  | "archived"
+  | "trash"
+  | `label:${string}`;
+
+/** Inline styles that also set CSS custom properties (`--foo`) under strict mode. */
+export type CSSVars = CSSProperties & Record<`--${string}`, string | number>;

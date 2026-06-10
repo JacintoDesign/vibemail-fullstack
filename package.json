@@ -12,7 +12,10 @@
     "db:types": "supabase gen types typescript --linked > src/types/database.ts",
     "build": "npx tsc",
     "test": "jest --runInBand",
-    "dev": "ts-node src/index.ts"
+    "dev": "ts-node src/index.ts",
+    "web:dev": "next dev",
+    "web:build": "next build",
+    "web:start": "next start"
   },
   "repository": {
     "type": "git",
@@ -32,11 +35,17 @@
     "@types/node": "^25.9.1",
     "googleapis": "^172.0.0",
     "jsonwebtoken": "^9.0.3",
+    "lucide-react": "^0.469.0",
+    "next": "^15.5.4",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.3"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
     "@types/supertest": "^7.2.0",
     "jest": "^30.4.2",
     "supertest": "^7.2.2",

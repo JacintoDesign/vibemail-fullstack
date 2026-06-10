@@ -1,0 +1,26 @@
+.line {
+  border-radius: var(--radius-full);
+  background: linear-gradient(
+    90deg,
+    var(--glass-1) 0%,
+    var(--glass-hover) 50%,
+    var(--glass-1) 100%
+  );
+  background-size: 200% 100%;
+  animation: vmShimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes vmShimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .line {
+    animation: none;
+  }
+}

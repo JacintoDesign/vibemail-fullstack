@@ -1,0 +1,382 @@
+/* VibeMail Glass — global base + ported chrome rules.
+   Pairs with styles/tokens.css (imported first in app/layout.tsx). */
+
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap");
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  background-color: var(--navy);
+  background-image: var(--canvas);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button {
+  font-family: inherit;
+}
+
+/* App shell sits directly on the navy canvas, above the background layers. */
+.vm-app-root {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: 100%;
+  height: 100%;
+  max-width: 1600px;
+  display: flex;
+  z-index: 1;
+}
+.vm-shell {
+  flex: 1;
+  height: 100%;
+  border: 1px solid var(--border-hairline);
+  overflow: hidden;
+  background: var(--glass-0);
+  -webkit-backdrop-filter: var(--glass-blur-0);
+  backdrop-filter: var(--glass-blur-0);
+}
+
+/* ── Background layers ─────────────────────────────────────────────────────
+   The WebGL nebula injects #vm-nebula-canvas at z-index 0; the white wash
+   sits above it (below the app glass) only in light mode. */
+#vm-light-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: transparent;
+  transition: background 0.3s ease;
+}
+html[data-theme="light"] #vm-light-overlay {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* ── Keyframes (ported) ────────────────────────────────────────────────── */
+@keyframes vmSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes vmDrawerIn {
+  from {
+    transform: translateY(28px);
+    opacity: 0.35;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes vmNavIn {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes vmSplashSlide {
+  from {
+    transform: translateX(-110%);
+  }
+  to {
+    transform: translateX(360%);
+  }
+}
+
+/* Mobile nav drawer — slides in from the left over the active panel. */
+.vm-mobile-nav {
+  animation: vmNavIn var(--dur-slow) var(--ease-out);
+}
+
+/* ── Panel chrome — column resizers ────────────────────────────────────── */
+.vm-resizer {
+  width: 7px;
+  margin: 0 -3px;
+  flex-shrink: 0;
+  align-self: stretch;
+  cursor: col-resize;
+  position: relative;
+  z-index: 5;
+  background: transparent;
+  touch-action: none;
+}
+.vm-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 1px;
+  background: transparent;
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+.vm-resizer:hover::after,
+.vm-resizer.dragging::after {
+  background: var(--accent-glow);
+}
+body.vm-col-dragging {
+  cursor: col-resize;
+  user-select: none;
+}
+body.vm-col-dragging * {
+  user-select: none !important;
+}
+
+/* ── Thread reader header — inline ↔ stacked via container query ────────── */
+.vm-thread-reader {
+  container-type: inline-size;
+  container-name: vmthread;
+}
+.vm-thread-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas: "title actions collapse" "meta meta meta";
+  column-gap: 8px;
+  row-gap: 5px;
+  align-items: center;
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--border-hairline);
+}
+.vm-thread-title {
+  grid-area: title;
+  width: 100%;
+  margin: 0;
+  font-size: clamp(15px, var(--text-title), 18px);
+  font-weight: var(--fw-bold);
+  color: var(--text-primary);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.vm-thread-actions {
+  grid-area: actions;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  align-self: center;
+}
+.vm-thread-collapse {
+  grid-area: collapse;
+  display: flex;
+  align-items: center;
+  align-self: center;
+}
+.vm-thread-meta {
+  grid-area: meta;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+@container vmthread (max-width: 520px) {
+  .vm-thread-head {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "title collapse" "actions actions" "meta meta";
+    row-gap: 12px;
+    align-items: center;
+  }
+  .vm-thread-title {
+    display: block;
+    -webkit-line-clamp: unset;
+    overflow: visible;
+  }
+  .vm-thread-collapse {
+    align-self: start;
+  }
+}
+
+/* Short-viewport adjustments — single scroll container for the thread reader. */
+@media (max-height: 820px) {
+  .vm-sidebar.vm-rail .vm-nav-btn {
+    height: 32px !important;
+  }
+  .vm-thread-reader {
+    overflow-y: auto;
+  }
+  .vm-thread-msgs {
+    flex: 0 0 auto !important;
+    overflow: visible !important;
+  }
+  .vm-msg-body {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+}
+
+/* Recipient chips — drop the avatar, keep address + remove. */
+.vm-chip-no-avatar > span:first-child {
+  display: none !important;
+}
+.vm-chip-no-avatar {
+  padding-left: 8px !important;
+}
+
+/* Thread message card — sender/date share a row when wide, stack when narrow. */
+.vm-msg-date-stack {
+  display: none;
+}
+@container vmthread (max-width: 440px) {
+  .vm-msg-date-inline {
+    display: none;
+  }
+  .vm-msg-date-stack {
+    display: block;
+  }
+}
+
+/* Empty-state hint line — one row with separator when wide, stacked when narrow. */
+.vm-empty-hints {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+@container vmempty (max-width: 380px) {
+  .vm-empty-hints {
+    flex-direction: column;
+    gap: 2px;
+    white-space: normal;
+  }
+  .vm-hint-sep {
+    display: none;
+  }
+}
+
+/* ── Splash / auth surface (ported #vm-splash vocabulary) ──────────────── */
+.vm-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  background-color: var(--navy);
+  background-image: var(--canvas);
+}
+.vm-splash-mark {
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--glass-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-2), inset 0 1px 0 var(--border-top-sheen);
+  color: var(--accent);
+}
+.vm-splash-word {
+  font-family: var(--font-mono);
+  font-weight: var(--fw-bold);
+  font-size: 22px;
+  color: var(--text-primary);
+}
+.vm-splash-word b {
+  color: var(--accent);
+  font-weight: var(--fw-bold);
+}
+.vm-splash-bar {
+  width: 140px;
+  height: 2px;
+  background: var(--border-hairline);
+  overflow: hidden;
+  border-radius: var(--radius-full);
+}
+.vm-splash-bar i {
+  display: block;
+  width: 40%;
+  height: 100%;
+  background: var(--accent);
+  border-radius: var(--radius-full);
+  animation: vmSplashSlide 1.1s var(--ease-standard) infinite;
+}
+.vm-splash-google {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  background: var(--glass-1);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  letter-spacing: 0.01em;
+  -webkit-backdrop-filter: var(--glass-blur-1);
+  backdrop-filter: var(--glass-blur-1);
+  box-shadow: var(--shadow-1), inset 0 1px 0 var(--border-top-sheen);
+  transition: opacity 0.32s var(--ease-standard),
+    transform 0.32s var(--ease-standard), background 0.12s var(--ease-standard);
+}
+.vm-splash-google:hover {
+  background: var(--glass-hover);
+}
+.vm-splash-google:active {
+  transform: translateY(1px) scale(0.99);
+}
+
+/* ── Implementation flag 3: safe-area compose footer ──────────────────────
+   The fixed mobile compose footer clears the iOS home indicator. */
+.vm-compose-footer-mobile {
+  padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+/* ── Implementation flag 1: reduced-motion ───────────────────────────────
+   Cap blur (also enforced inline by shell-vars), kill the nebula + all the
+   ported animations. */
+@media (prefers-reduced-motion: reduce) {
+  #vm-nebula-canvas {
+    display: none !important;
+  }
+  .vm-mobile-nav,
+  .vm-splash-bar i,
+  [data-vm-drawer] {
+    animation: none !important;
+  }
+  .vm-splash-bar i {
+    width: 100%;
+    opacity: 0.5;
+  }
+}
+
+/* Thin scrollbars to match the glass aesthetic. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}

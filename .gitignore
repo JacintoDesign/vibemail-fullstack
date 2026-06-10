@@ -5,3 +5,9 @@ dist/
 .vercel
 supabase/.temp/
 .claude/scheduled_tasks.lock
+
+# Next.js (app/ frontend)
+.next/
+next-env.d.ts
+*.tsbuildinfo
+.DS_Store
