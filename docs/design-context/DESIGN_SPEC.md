@@ -32,18 +32,6 @@ UNAUTHORIZED or TOKEN_EXPIRED: redirect to OAuth flow, no banner.
 ### Empty state
 Centred illustration and text — "Your inbox is empty."
 
-### Label filter bar
-Sits between the search bar and the inbox list. Fixed chips always render:
-All, Starred, Archive, Trash. Custom Gmail labels appear after the fixed
-chips. All is active by default. Only one chip active at a time.
-Clicking the active chip does nothing.
-
-Starred — filters to isStarred: true.
-Archive — filters to status: 'archived'.
-Trash — filters to status: 'trash'.
-
-Empty state per label: "Nothing in [label name]."
-
 
 ## Thread View
 
@@ -159,7 +147,7 @@ Heavy glassmorphism throughout. Every panel, card, message row, and drawer
 carries a frosted glass treatment: translucent backgrounds with strong
 backdrop blur, thin borders at 15–20% white opacity, and soft drop shadows
 that create depth through layering rather than solid colour contrast. The
-background palette runs deep navy (#0a0f1e) to near-black (#050810). Glass
+background palette is near-black (#050810) on dark mode. Glass
 surfaces sit at 8–12% white opacity with blur values between 20px and 40px
 depending on elevation — higher elevation surfaces use stronger blur. The
 single accent colour handles interactive states, unread indicators, starred
