@@ -346,10 +346,11 @@ export function VibeMailApp() {
     const n = selectedIds.size;
     eachSelected((m) => {
       if (m.status === "trash") {
+        // Remove TRASH and re-add INBOX so it returns to the inbox, not Archive.
         patchAction(
           m,
           { status: "inbox", labelIds: Array.from(new Set([...withoutLabel(m, "TRASH"), "INBOX"])) },
-          { trashed: false },
+          { trashed: false, archived: false },
         );
       } else {
         patchAction(m, {status: "inbox", labelIds: withLabel(m, "INBOX") }, { archived: false });
@@ -537,6 +538,8 @@ export function VibeMailApp() {
     }
   };
   // Restore out of Trash or Archive back into the Inbox: drop TRASH, ensure INBOX.
+  // From trash we send BOTH booleans — `trashed:false` removes TRASH and
+  // `archived:false` re-adds INBOX; otherwise the row would land in Archive.
   const restoreSelected = () => {
     if (selected) {
       const wasTrash = selected.status === "trash";
@@ -546,7 +549,7 @@ export function VibeMailApp() {
           status: "inbox",
           labelIds: Array.from(new Set([...withoutLabel(selected, "TRASH"), "INBOX"])),
         },
-        wasTrash ? { trashed: false } : { archived: false },
+        wasTrash ? { trashed: false, archived: false } : { archived: false },
       );
       showToast(wasTrash ? "Restored to Inbox." : "Moved to Inbox.");
       setSelectedId(null);
