@@ -7,7 +7,7 @@
     "doc": "docs",
     "test": "tests"
   },
-    "scripts": {
+  "scripts": {
     "db:push": "supabase db push",
     "db:types": "supabase gen types typescript --linked > src/types/database.ts",
     "build": "npx tsc",
@@ -36,6 +36,7 @@
     "googleapis": "^172.0.0",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.469.0",
+    "motion": "^12.40.0",
     "next": "^15.5.4",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",

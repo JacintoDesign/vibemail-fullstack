@@ -4,6 +4,7 @@
 // Ported from MessageList.jsx. The inbox/search card is the shared MessageRow.
 
 import type { CSSProperties, ReactNode } from "react";
+import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { Banner, Button, Icon, IconButton, Input, Skeleton } from "@/components/ds";
 import type { IconName } from "@/components/ds";
 import type { Message } from "@/lib/types";
@@ -246,6 +247,7 @@ export function MessageList({
   };
 
   return (
+    <MotionConfig reducedMotion="user">
     <div style={containerStyle}>
       {/* Folder header */}
       <div
@@ -387,32 +389,40 @@ export function MessageList({
             hint={searchMode ? "Try a different name, subject, or keyword." : emptyHint}
           />
         ) : (
-          <div
+          <motion.div
             style={{
               display: "flex",
               flexDirection: "column",
               gap: "var(--card-gap)",
               padding: mobile ? "9px 8px" : "12px 10px",
             }}
+            // Cascade the rows in on first paint; new arrivals fade in solo.
+            initial="hidden"
+            animate="show"
+            variants={{ show: { transition: { staggerChildren: 0.035 } } }}
           >
-            {visibleMessages.map((m) => (
-              <MessageRow
-                key={m.id}
-                m={m}
-                compact={mobile}
-                selected={selectedId === m.id}
-                onOpen={onOpen}
-                onToggleRead={() => onToggleRead(m)}
-                onToggleStar={() => onToggleStar(m)}
-                selectable={!mobile && !!onToggleSelect}
-                checked={selectedIds?.has(m.id)}
-                selectionActive={selectionActive}
-                onToggleSelect={() => onToggleSelect?.(m.id)}
-                availableLabels={mobile ? undefined : labelOptions}
-                onAddLabel={mobile ? undefined : (label) => onAddLabel?.(m.id, label)}
-                onRemoveLabel={mobile ? undefined : (label) => onRemoveLabel?.(m.id, label)}
-              />
-            ))}
+            {/* popLayout pulls a removed row out of flow so the rest slide up
+                to fill the gap as it shrinks away. */}
+            <AnimatePresence initial={false} mode="popLayout">
+              {visibleMessages.map((m) => (
+                <MessageRow
+                  key={m.id}
+                  m={m}
+                  compact={mobile}
+                  selected={selectedId === m.id}
+                  onOpen={onOpen}
+                  onToggleRead={() => onToggleRead(m)}
+                  onToggleStar={() => onToggleStar(m)}
+                  selectable={!mobile && !!onToggleSelect}
+                  checked={selectedIds?.has(m.id)}
+                  selectionActive={selectionActive}
+                  onToggleSelect={() => onToggleSelect?.(m.id)}
+                  availableLabels={mobile ? undefined : labelOptions}
+                  onAddLabel={mobile ? undefined : (label) => onAddLabel?.(m.id, label)}
+                  onRemoveLabel={mobile ? undefined : (label) => onRemoveLabel?.(m.id, label)}
+                />
+              ))}
+            </AnimatePresence>
             {showLoadMore && (
               <div style={{ display: "flex", justifyContent: "center", padding: "8px 0 4px" }}>
                 <Button
@@ -425,9 +435,10 @@ export function MessageList({
                 </Button>
               </div>
             )}
-          </div>
+          </motion.div>
         )}
       </div>
     </div>
+    </MotionConfig>
   );
 }

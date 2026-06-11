@@ -3,6 +3,7 @@
 // Collapsible thread message card. Shared by ReadingPane, ThreadWindow, and the
 // ComposeDrawer quoted-thread view. Ported from VMMessageCard in ReadingPane.jsx.
 
+import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { GlassPanel, Icon } from "@/components/ds";
 import type { ThreadMsg } from "@/lib/types";
 
@@ -16,6 +17,7 @@ export function MessageCard({
   onToggle: () => void;
 }) {
   return (
+    <MotionConfig reducedMotion="user">
     <GlassPanel tier={expanded ? 1 : 0} radius="md" style={{ overflow: "hidden", flexShrink: 0 }}>
       <div
         className="vm-msg-head"
@@ -126,8 +128,22 @@ export function MessageCard({
           </span>
         </button>
       </div>
-      {expanded ? <ExpandedBody msg={msg} /> : null}
+      <AnimatePresence initial={false}>
+        {expanded ? (
+          <motion.div
+            key="body"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: [0.2, 0.85, 0.3, 1] }}
+            style={{ overflow: "hidden" }}
+          >
+            <ExpandedBody msg={msg} />
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </GlassPanel>
+    </MotionConfig>
   );
 }
 
