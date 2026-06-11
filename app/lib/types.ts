@@ -12,12 +12,20 @@ export interface ThreadMsg {
   from: string;
   email: string;
   date: string;
+  /** Plain-text body — the primary rendering. Falls back to the snippet. */
   body: string;
+  /** Decoded HTML body, rendered in a sandboxed iframe when `body` is empty. */
+  bodyHtml?: string | null;
+  /** Gmail message id for this thread message (used by "View in Gmail"). */
+  gmailId?: string;
 }
 
 export interface Message {
   // ── CONTRACT core ──────────────────────────────────────────────
   id: string;
+  /** Gmail message id. The action endpoints (PATCH /messages/:id, drafts)
+   *  key on this, NOT the Supabase `id` (which is a generated UUID). */
+  gmailId: string;
   threadId: string;
   from: string;
   to: string;
@@ -25,6 +33,7 @@ export interface Message {
   date: string;
   snippet: string;
   bodyPlain?: string | null;
+  bodyHtml?: string | null;
   labelIds: string[];
   isRead: boolean;
   isStarred: boolean;

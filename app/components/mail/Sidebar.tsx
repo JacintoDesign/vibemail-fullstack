@@ -61,6 +61,8 @@ export interface SidebarProps {
   active: string;
   onSelect: (f: string) => void;
   counts: SidebarCounts;
+  /** The signed-in account's email, shown in the footer. */
+  accountEmail?: string;
   onCompose: () => void;
   onToggleRail: () => void;
   labels: Label[];
@@ -461,6 +463,7 @@ export function Sidebar({
   active,
   onSelect,
   counts,
+  accountEmail,
   onCompose,
   onToggleRail,
   labels,
@@ -659,7 +662,7 @@ export function Sidebar({
               lineHeight: 1.3,
             }}
           >
-            you@vibemail.app
+            {accountEmail || "Signed in"}
           </div>
         ) : null}
 

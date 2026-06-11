@@ -2,7 +2,7 @@
 // concrete target. A thin fetch wrapper that attaches the Bearer JWT, uses the
 // /api/v1 base path, and surfaces the CONTRACT error envelope.
 
-import { getToken } from "./auth";
+import { forceSignOut, getToken } from "./auth";
 
 const API_BASE = "/api/v1";
 
@@ -50,6 +50,9 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     const envelope = (data ?? {
       error: { code: "UNKNOWN", message: res.statusText },
     }) as ApiErrorEnvelope;
+    // An expired or invalid JWT is unrecoverable in-app — drop the token and
+    // bounce back to the sign-in surface (which restarts the OAuth flow).
+    if (res.status === 401) forceSignOut();
     throw new ApiError(res.status, envelope);
   }
 

@@ -81,7 +81,7 @@ export function MessageCard({
                 marginTop: 4,
               }}
             >
-              {msg.body}
+              {msg.body || (msg.bodyHtml ? "HTML message — open to view" : "")}
             </div>
           ) : null}
         </div>
@@ -126,21 +126,48 @@ export function MessageCard({
           </span>
         </button>
       </div>
-      {expanded ? (
-        <div
-          className="vm-msg-body"
-          style={{
-            padding: "16px",
-            fontFamily: "var(--font-mono)",
-            fontSize: "var(--text-body)",
-            lineHeight: "var(--lh-body)",
-            color: "var(--text-body-ink)",
-            whiteSpace: "pre-wrap",
-          }}
-        >
-          {msg.body}
-        </div>
-      ) : null}
+      {expanded ? <ExpandedBody msg={msg} /> : null}
     </GlassPanel>
+  );
+}
+
+// The plain-text body is the primary rendering. When it is empty (the wire
+// reported `bodyPlain: null`) but an HTML body exists, render that HTML inside a
+// sandboxed iframe — `sandbox` with no `allow-*` tokens blocks scripts, forms,
+// popups, and same-origin access, so remote markup can't touch the app.
+function ExpandedBody({ msg }: { msg: ThreadMsg }) {
+  if (!msg.body && msg.bodyHtml) {
+    return (
+      <div className="vm-msg-body" style={{ padding: "16px" }}>
+        <iframe
+          title="Email body"
+          sandbox=""
+          srcDoc={msg.bodyHtml}
+          style={{
+            width: "100%",
+            minHeight: 240,
+            border: "none",
+            borderRadius: "var(--radius-sm)",
+            background: "var(--surface-input, #fff)",
+            colorScheme: "light",
+          }}
+        />
+      </div>
+    );
+  }
+  return (
+    <div
+      className="vm-msg-body"
+      style={{
+        padding: "16px",
+        fontFamily: "var(--font-mono)",
+        fontSize: "var(--text-body)",
+        lineHeight: "var(--lh-body)",
+        color: "var(--text-body-ink)",
+        whiteSpace: "pre-wrap",
+      }}
+    >
+      {msg.body}
+    </div>
   );
 }

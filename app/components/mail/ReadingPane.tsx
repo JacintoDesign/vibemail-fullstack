@@ -2,7 +2,7 @@
 
 // Right column: thread reader + empty placeholder. Ported from ReadingPane.jsx.
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { Badge, Button, Icon, IconButton } from "@/components/ds";
 import type { Message } from "@/lib/types";
 import { ChromeBtn } from "./PanelChrome";
@@ -150,6 +150,38 @@ function ThreadReader({
   const inTrash = message.status === "trash";
   const inArchive = message.status === "archived";
 
+  // "View in Gmail" — opens the conversation on Gmail's web client. Gmail's
+  // hash router keys threads off the hex threadId, which is the same id Gmail's
+  // API returns, so `#all/<threadId>` lands on the conversation.
+  const gmailHref = `https://mail.google.com/mail/u/0/#all/${message.threadId}`;
+  const gmailLink = (size = 36) => {
+    const style: CSSProperties = {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      width: size,
+      height: size,
+      borderRadius: "var(--radius-sm)",
+      color: "var(--text-faint)",
+      textDecoration: "none",
+      flexShrink: 0,
+    };
+    return (
+      <a
+        href={gmailHref}
+        target="_blank"
+        rel="noreferrer noopener"
+        title="View in Gmail"
+        aria-label="View in Gmail"
+        style={style}
+        onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text-primary)")}
+        onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-faint)")}
+      >
+        <Icon name="external" size={16} />
+      </a>
+    );
+  };
+
   const cards = thread.map((m, i) => (
     <MessageCard key={i} msg={m} expanded={openSet.has(i)} onToggle={() => toggleMsg(i)} />
   ));
@@ -184,6 +216,7 @@ function ThreadReader({
       <>
         <IconButton icon="inbox" variant="ghost" label="Restore to Inbox" onClick={onRestore} style={mobileBtn} />
         <IconButton icon="star" label="Star" active={message.isStarred} onClick={onToggleStar} style={mobileBtn} />
+        {gmailLink(32)}
         <IconButton icon="trash" variant="ghost" label="Delete forever" onClick={onDeleteForever} style={mobileBtn} />
       </>
     ) : inArchive ? (
@@ -191,12 +224,14 @@ function ThreadReader({
         <IconButton icon="inbox" variant="ghost" label="Move to Inbox" onClick={onRestore} style={mobileBtn} />
         <IconButton icon="mail" variant="ghost" label="Mark unread" onClick={onMarkUnread} style={mobileBtn} />
         <IconButton icon="star" label="Star" active={message.isStarred} onClick={onToggleStar} style={mobileBtn} />
+        {gmailLink(32)}
         <IconButton icon="trash" variant="ghost" label="Delete" onClick={onTrash} style={mobileBtn} />
       </>
     ) : (
       <>
         <IconButton icon="mail" variant="ghost" label="Mark unread" onClick={onMarkUnread} style={mobileBtn} />
         <IconButton icon="star" label="Star" active={message.isStarred} onClick={onToggleStar} style={mobileBtn} />
+        {gmailLink(32)}
         <IconButton icon="archive" variant="ghost" label="Archive" onClick={onArchive} style={mobileBtn} />
         <IconButton icon="trash" variant="ghost" label="Delete" onClick={onTrash} style={mobileBtn} />
       </>
@@ -266,6 +301,7 @@ function ThreadReader({
     <>
       <IconButton icon="inbox" variant="ghost" label="Restore to Inbox" onClick={onRestore} />
       <IconButton icon="star" label="Star" active={message.isStarred} onClick={onToggleStar} />
+      {gmailLink()}
       <IconButton icon="trash" variant="ghost" label="Delete forever" onClick={onDeleteForever} />
       <ChromeBtn icon="popOut" label="Pop out thread" onClick={onPopOut} />
     </>
@@ -274,6 +310,7 @@ function ThreadReader({
       <IconButton icon="inbox" variant="ghost" label="Move to Inbox" onClick={onRestore} />
       <IconButton icon="mail" variant="ghost" label="Mark unread" onClick={onMarkUnread} />
       <IconButton icon="star" label="Star" active={message.isStarred} onClick={onToggleStar} />
+      {gmailLink()}
       <IconButton icon="trash" variant="ghost" label="Delete" onClick={onTrash} />
       <ChromeBtn icon="popOut" label="Pop out thread" onClick={onPopOut} />
     </>
@@ -281,6 +318,7 @@ function ThreadReader({
     <>
       <IconButton icon="mail" variant="ghost" label="Mark unread" onClick={onMarkUnread} />
       <IconButton icon="star" label="Star" active={message.isStarred} onClick={onToggleStar} />
+      {gmailLink()}
       <IconButton icon="archive" variant="ghost" label="Archive" onClick={onArchive} />
       <IconButton icon="trash" variant="ghost" label="Delete" onClick={onTrash} />
       <ChromeBtn icon="popOut" label="Pop out thread" onClick={onPopOut} />

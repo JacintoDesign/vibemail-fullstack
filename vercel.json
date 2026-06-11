@@ -1,6 +1,6 @@
 {
   "installCommand": "npm install",
-  "buildCommand": "",
+  "buildCommand": "next build",
   "rewrites": [
     { "source": "/webhook/gmail", "destination": "/api/webhook/gmail" }
   ],

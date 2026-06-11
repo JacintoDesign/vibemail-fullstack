@@ -8,12 +8,16 @@ import { VibeMailApp } from "@/components/VibeMailApp";
 import { useAuth } from "@/providers/AuthProvider";
 
 export default function HomePage() {
-  const { ready, authed, signIn } = useAuth();
+  const { ready, authed } = useAuth();
 
   // Avoid a flash before the initial token read completes.
   if (!ready) return null;
 
-  if (!authed) return <AuthSplash onSignIn={() => signIn()} />;
+  // Start the real Google OAuth flow. The backend redirects back to
+  // /auth/callback?token=<jwt>, which stores the JWT and lands in the app.
+  if (!authed) {
+    return <AuthSplash onSignIn={() => { window.location.href = "/api/v1/auth/google"; }} />;
+  }
 
   return <VibeMailApp />;
 }

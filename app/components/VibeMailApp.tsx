@@ -5,9 +5,9 @@
 // effects now live in SettingsProvider + NebulaBackground; the design-time
 // tweaks panel and its demo-state / simulate-send-fail knobs are dropped.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BulkActionBar, type BulkAction } from "@/components/mail/BulkActionBar";
-import { ComposeDrawer } from "@/components/mail/ComposeDrawer";
+import { ComposeDrawer, type ComposePayload } from "@/components/mail/ComposeDrawer";
 import { KeyboardHelp } from "@/components/mail/KeyboardHelp";
 import { MessageList } from "@/components/mail/MessageList";
 import type { ReadFilter } from "@/components/mail/MessageList";
@@ -15,9 +15,30 @@ import { CollapsedRail, Resizer } from "@/components/mail/PanelChrome";
 import { ReadingPane } from "@/components/mail/ReadingPane";
 import { Sidebar } from "@/components/mail/Sidebar";
 import { ThreadWindow, type PopoutWin } from "@/components/mail/ThreadWindow";
-import { getMailbox } from "@/lib/data-source";
+import { ApiError } from "@/lib/api-client";
+import {
+  createDraft,
+  deleteDraft as apiDeleteDraft,
+  patchMessage,
+  sendDraft,
+  sendMessage,
+  updateDraft,
+} from "@/lib/api";
+import {
+  DEFAULT_LABELS,
+  fetchFolder,
+  fetchSearch,
+  getAccount,
+  loadThread,
+} from "@/lib/data-source";
 import type { CSSVars, Message } from "@/lib/types";
 import { useSettings } from "@/providers/SettingsProvider";
+
+/** Turn any thrown error into a short, human banner/toast string. */
+function errMessage(e: unknown): string {
+  if (e instanceof ApiError) return e.message || "Something went wrong.";
+  return "Couldn't reach the server. Check your connection and try again.";
+}
 
 const VM_FOLDER_TITLE: Record<string, string> = {
   all: "Inbox",
@@ -46,7 +67,7 @@ type Layout = typeof VM_LAYOUT_DEFAULTS;
 
 interface Toast {
   txt: string;
-  tone: "success";
+  tone: "success" | "error";
 }
 
 const folderTitleFor = (filter: string): string =>
@@ -129,8 +150,12 @@ export function VibeMailApp() {
   const focusWin = (id: string) => setPopouts((ws) => ws.map((w) => (w.id === id ? { ...w, z: ++zRef.current } : w)));
 
   // ── Mailbox state ─────────────────────────────────────────────────────────
-  const [messages, setMessages] = useState<Message[]>(() => getMailbox().messages);
-  const labels = useMemo(() => getMailbox().labels, []);
+  // `messages` holds the current folder's (or search's) loaded page(s); the API
+  // does the folder/label filtering and cursor pagination server-side.
+  const [messages, setMessages] = useState<Message[]>([]);
+  const labels = DEFAULT_LABELS;
+  // Read once on mount so SSR and first client render agree (avoids hydration mismatch).
+  const [accountEmail] = useState(() => getAccount());
 
   const [filter, setFilter] = useState("all");
   const [readFilter, setReadFilter] = useState<ReadFilter>("all");
@@ -138,8 +163,11 @@ export function VibeMailApp() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [searchMode, setSearchMode] = useState(false);
   const [query, setQuery] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const [composeOpen, setComposeOpen] = useState(false);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
@@ -147,12 +175,64 @@ export function VibeMailApp() {
   const [toast, setToast] = useState<Toast | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
 
-  // Simulate a fetch on folder change.
-  useEffect(() => {
+  // ── Data loading (folder / search) ────────────────────────────────────────
+  // A monotonically increasing request id discards responses from superseded
+  // fetches (e.g. fast folder switches or search keystrokes).
+  const reqIdRef = useRef(0);
+
+  const loadFirstPage = useCallback(async () => {
+    const myId = ++reqIdRef.current;
     setLoading(true);
-    const id = setTimeout(() => setLoading(false), 520);
-    return () => clearTimeout(id);
-  }, [filter]);
+    setError(null);
+    try {
+      const page = searchMode
+        ? await fetchSearch(query.trim())
+        : await fetchFolder(filter);
+      if (reqIdRef.current !== myId) return; // a newer request superseded this
+      setMessages(page.messages);
+      setNextCursor(page.nextCursor);
+    } catch (e) {
+      if (reqIdRef.current !== myId) return;
+      setMessages([]);
+      setNextCursor(null);
+      setError(errMessage(e));
+    } finally {
+      if (reqIdRef.current === myId) setLoading(false);
+    }
+  }, [filter, searchMode, query]);
+
+  useEffect(() => {
+    if (searchMode) {
+      if (!query.trim()) {
+        reqIdRef.current++; // cancel any in-flight search
+        setMessages([]);
+        setNextCursor(null);
+        setLoading(false);
+        setError(null);
+        return;
+      }
+      // Debounce keystrokes so search hits the server once typing settles.
+      const t = setTimeout(loadFirstPage, 300);
+      return () => clearTimeout(t);
+    }
+    loadFirstPage();
+  }, [filter, searchMode, query, loadFirstPage]);
+
+  const loadMore = useCallback(async () => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const page = searchMode
+        ? await fetchSearch(query.trim(), nextCursor)
+        : await fetchFolder(filter, nextCursor);
+      setMessages((ms) => [...ms, ...page.messages]);
+      setNextCursor(page.nextCursor);
+    } catch (e) {
+      setError(errMessage(e));
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [nextCursor, loadingMore, searchMode, query, filter]);
 
   // Global keyboard shortcuts live in a single handler defined further down,
   // once every action it dispatches to is in scope (see the keydown effect
@@ -170,19 +250,10 @@ export function VibeMailApp() {
   );
 
   const baseVisible = useMemo(() => {
-    if (searchMode) {
-      const q = query.trim().toLowerCase();
-      if (!q) return [];
-      return messages.filter(
-        (m) =>
-          m.status !== "trash" &&
-          (m.senderName.toLowerCase().includes(q) ||
-            (m.senderEmail || "").toLowerCase().includes(q) ||
-            m.subject.toLowerCase().includes(q) ||
-            m.snippet.toLowerCase().includes(q) ||
-            (m.to || "").toLowerCase().includes(q)),
-      );
-    }
+    // Search results arrive already filtered (and trash-excluded) from the
+    // server; the folder views keep a light status filter so optimistic status
+    // changes (archive/trash) drop a row out of the current folder immediately.
+    if (searchMode) return messages;
     if (filter === "all") return messages.filter((m) => m.status === "inbox");
     if (filter === "starred") return messages.filter((m) => m.isStarred && m.status !== "trash");
     if (filter === "sent") return messages.filter((m) => m.status === "sent");
@@ -202,6 +273,40 @@ export function VibeMailApp() {
     setMessages((ms) => ms.map((m) => (m.id === id ? { ...m, ...patch } : m)));
   const selected = useMemo(() => messages.find((m) => m.id === selectedId) || null, [messages, selectedId]);
 
+  // Apply an optimistic local change, fire the PATCH, then reconcile the derived
+  // flags from the server response — rolling the row back (and toasting) on
+  // failure. ALREADY_IN_STATE means the optimistic value was already correct.
+  // The local row identity is `m.id` (Supabase UUID); the PATCH endpoint is
+  // keyed by `m.gmailId` (Gmail message id) — they are not the same value.
+  const patchAction = async (
+    m: Message,
+    optimistic: Partial<Message>,
+    body: { read?: boolean; starred?: boolean; archived?: boolean; trashed?: boolean },
+  ): Promise<void> => {
+    const prev = messages.find((x) => x.id === m.id);
+    update(m.id, optimistic);
+    try {
+      const { message: r } = await patchMessage(m.gmailId, body);
+      update(m.id, { isRead: r.isRead, isStarred: r.isStarred, status: r.status });
+    } catch (e) {
+      if (e instanceof ApiError && e.code === "ALREADY_IN_STATE") return;
+      if (prev) {
+        update(m.id, {
+          isRead: prev.isRead,
+          isStarred: prev.isStarred,
+          status: prev.status,
+          labelIds: prev.labelIds,
+        });
+      }
+      showToast(errMessage(e), "error");
+    }
+  };
+
+  // Label-set helpers for optimistic updates that mirror the server's label math.
+  const withoutLabel = (m: Message, l: string) => (m.labelIds || []).filter((x) => x !== l);
+  const withLabel = (m: Message, l: string) =>
+    Array.from(new Set([...(m.labelIds || []), l]));
+
   // ── Multiselect ───────────────────────────────────────────────────────────
   const selectionActive = selectedIds.size > 0;
   const allVisibleSelected = visible.length > 0 && visible.every((m) => selectedIds.has(m.id));
@@ -219,51 +324,75 @@ export function VibeMailApp() {
     setSelectedIds(new Set());
   }, [filter, searchMode]);
 
-  const mutateSelected = (fn: (m: Message) => Message) =>
-    setMessages((ms) => ms.map((m) => (selectedIds.has(m.id) ? fn(m) : m)));
-  const removeSelected = () => setMessages((ms) => ms.filter((m) => !selectedIds.has(m.id)));
+  const removeByIds = (ids: string[]) => {
+    const set = new Set(ids);
+    setMessages((ms) => ms.filter((m) => !set.has(m.id)));
+  };
+  const eachSelected = (fn: (m: Message) => void) =>
+    [...selectedIds].forEach((id) => {
+      const m = messages.find((x) => x.id === id);
+      if (m) fn(m);
+    });
 
   const bulkArchive = () => {
     const n = selectedIds.size;
-    mutateSelected((m) => ({
-      ...m,
-      status: "archived",
-      labelIds: (m.labelIds || []).filter((l) => l !== "INBOX"),
-    }));
+    eachSelected((m) =>
+      patchAction(m, {status: "archived", labelIds: withoutLabel(m, "INBOX") }, { archived: true }),
+    );
     clearSelection();
     showToast(`${n} archived.`);
   };
   const bulkRestore = () => {
     const n = selectedIds.size;
-    mutateSelected((m) => ({
-      ...m,
-      status: "inbox",
-      labelIds: Array.from(new Set([...(m.labelIds || []).filter((l) => l !== "TRASH"), "INBOX"])),
-    }));
+    eachSelected((m) => {
+      if (m.status === "trash") {
+        patchAction(
+          m,
+          { status: "inbox", labelIds: Array.from(new Set([...withoutLabel(m, "TRASH"), "INBOX"])) },
+          { trashed: false },
+        );
+      } else {
+        patchAction(m, {status: "inbox", labelIds: withLabel(m, "INBOX") }, { archived: false });
+      }
+    });
     clearSelection();
     showToast(`${n} moved to Inbox.`);
   };
   const bulkTrash = () => {
     const n = selectedIds.size;
-    mutateSelected((m) => ({ ...m, status: "trash", labelIds: ["TRASH"] }));
+    eachSelected((m) =>
+      patchAction(
+        m,
+        { status: "trash", labelIds: Array.from(new Set([...withoutLabel(m, "INBOX"), "TRASH"])) },
+        { trashed: true },
+      ),
+    );
     clearSelection();
     showToast(`${n} moved to Trash.`);
   };
+  // Drafts "Discard" deletes the Gmail draft + Supabase row. Trash "Delete
+  // forever" has no contract endpoint, so the row is only dropped locally.
   const bulkDeleteForever = () => {
-    const n = selectedIds.size;
-    removeSelected();
+    const ids = [...selectedIds];
+    if (filter === "drafts") {
+      ids.forEach((id) => {
+        const m = messages.find((x) => x.id === id);
+        if (m) apiDeleteDraft(m.gmailId).catch((e) => showToast(errMessage(e), "error"));
+      });
+    }
+    removeByIds(ids);
     clearSelection();
-    showToast(`${n} permanently deleted.`);
+    showToast(`${ids.length} ${filter === "drafts" ? "discarded" : "permanently deleted"}.`);
   };
   const bulkMarkRead = (read: boolean) => {
     const n = selectedIds.size;
-    mutateSelected((m) => ({
-      ...m,
-      isRead: read,
-      labelIds: read
-        ? (m.labelIds || []).filter((l) => l !== "UNREAD")
-        : Array.from(new Set([...(m.labelIds || []), "UNREAD"])),
-    }));
+    eachSelected((m) =>
+      patchAction(
+        m,
+        { isRead: read, labelIds: read ? withoutLabel(m, "UNREAD") : withLabel(m, "UNREAD") },
+        { read },
+      ),
+    );
     clearSelection();
     showToast(`${n} marked ${read ? "read" : "unread"}.`);
   };
@@ -319,8 +448,8 @@ export function VibeMailApp() {
     />
   ) : null;
 
-  const showToast = (txt: string) => {
-    setToast({ txt, tone: "success" });
+  const showToast = (txt: string, tone: "success" | "error" = "success") => {
+    setToast({ txt, tone });
     setTimeout(() => setToast(null), 2600);
   };
 
@@ -335,12 +464,33 @@ export function VibeMailApp() {
       setSelectedId(null);
       return;
     }
-    if (!m.isRead) update(m.id, { isRead: true, labelIds: (m.labelIds || []).filter((l) => l !== "UNREAD") });
     setSelectedId(m.id);
     if (layout.readCollapsed) patchLayout({ readCollapsed: false });
+    // Mark read on the server (PATCH) if it was unread.
+    if (!m.isRead) {
+      patchAction(m, {isRead: true, labelIds: withoutLabel(m, "UNREAD") }, { read: true });
+    }
+    // Pull the full thread (oldest-first) so the reader shows every message.
+    loadThread(m.threadId)
+      .then((thread) => {
+        if (thread.length) update(m.id, { thread });
+      })
+      .catch(() => {
+        /* keep the single-message card already mapped from the list row */
+      });
   };
-  const toggleRead = (m: Message) => update(m.id, { isRead: !m.isRead });
-  const toggleStar = (m: Message) => update(m.id, { isStarred: !m.isStarred });
+  const toggleRead = (m: Message) =>
+    patchAction(
+      m,
+      { isRead: !m.isRead, labelIds: m.isRead ? withLabel(m, "UNREAD") : withoutLabel(m, "UNREAD") },
+      { read: !m.isRead },
+    );
+  const toggleStar = (m: Message) =>
+    patchAction(
+      m,
+      { isStarred: !m.isStarred, labelIds: m.isStarred ? withoutLabel(m, "STARRED") : withLabel(m, "STARRED") },
+      { starred: !m.isStarred },
+    );
 
   const selectFolder = (f: string) => {
     setSelectedId(null);
@@ -352,27 +502,36 @@ export function VibeMailApp() {
 
   const onRefresh = () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 700);
+    loadFirstPage().finally(() => setRefreshing(false));
   };
   const onRetry = () => {
-    setLoading(true);
-    setTimeout(() => setLoading(false), 600);
+    loadFirstPage();
   };
 
   const markUnreadAndClose = () => {
-    if (selected) update(selected.id, { isRead: false });
+    if (selected) {
+      patchAction(
+        selected,
+        { isRead: false, labelIds: withLabel(selected, "UNREAD") },
+        { read: false },
+      );
+    }
     setSelectedId(null);
   };
   const archiveSelected = () => {
     if (selected) {
-      update(selected.id, { status: "archived", labelIds: (selected.labelIds || []).filter((l) => l !== "INBOX") });
+      patchAction(selected, { status: "archived", labelIds: withoutLabel(selected, "INBOX") }, { archived: true });
       showToast("Conversation archived.");
       setSelectedId(null);
     }
   };
   const trashSelected = () => {
     if (selected) {
-      update(selected.id, { status: "trash", labelIds: ["TRASH"] });
+      patchAction(
+        selected,
+        { status: "trash", labelIds: Array.from(new Set([...withoutLabel(selected, "INBOX"), "TRASH"])) },
+        { trashed: true },
+      );
       showToast("Moved to Trash.");
       setSelectedId(null);
     }
@@ -381,44 +540,83 @@ export function VibeMailApp() {
   const restoreSelected = () => {
     if (selected) {
       const wasTrash = selected.status === "trash";
-      update(selected.id, {
-        status: "inbox",
-        labelIds: Array.from(
-          new Set([...(selected.labelIds || []).filter((l) => l !== "TRASH"), "INBOX"]),
-        ),
-      });
+      patchAction(
+        selected,
+        {
+          status: "inbox",
+          labelIds: Array.from(new Set([...withoutLabel(selected, "TRASH"), "INBOX"])),
+        },
+        wasTrash ? { trashed: false } : { archived: false },
+      );
       showToast(wasTrash ? "Restored to Inbox." : "Moved to Inbox.");
       setSelectedId(null);
     }
   };
-  // Permanent delete from Trash — removes the row entirely.
+  // Permanent delete from Trash. No contract endpoint hard-deletes a non-draft
+  // message, so the row is only dropped from the local view.
   const deleteForeverSelected = () => {
     if (selected) {
-      setMessages((ms) => ms.filter((m) => m.id !== selected.id));
+      removeByIds([selected.id]);
       showToast("Permanently deleted.");
       setSelectedId(null);
     }
   };
-  // Discard a draft — drops the row; closes the compose drawer if it was editing it.
+  // Discard a draft — deletes the Gmail draft + Supabase row, then drops it.
   const deleteDraft = (m: Message | null) => {
     if (!m) return;
-    setMessages((ms) => ms.filter((x) => x.id !== m.id));
+    apiDeleteDraft(m.gmailId)
+      .then(() => {
+        removeByIds([m.id]);
+        showToast("Draft discarded.");
+      })
+      .catch((e) => showToast(errMessage(e), "error"));
     setComposeOpen(false);
     setDraft(null);
-    showToast("Draft discarded.");
   };
 
   // Archive / trash an arbitrary message (keyboard shortcuts act on whichever
   // row is focused, not just the open thread).
   const archiveMessage = (m: Message) => {
-    update(m.id, { status: "archived", labelIds: (m.labelIds || []).filter((l) => l !== "INBOX") });
+    patchAction(m, {status: "archived", labelIds: withoutLabel(m, "INBOX") }, { archived: true });
     showToast("Conversation archived.");
     if (selectedId === m.id) setSelectedId(null);
   };
   const trashMessage = (m: Message) => {
-    update(m.id, { status: "trash", labelIds: ["TRASH"] });
+    patchAction(
+      m,
+      { status: "trash", labelIds: Array.from(new Set([...withoutLabel(m, "INBOX"), "TRASH"])) },
+      { trashed: true },
+    );
     showToast("Moved to Trash.");
     if (selectedId === m.id) setSelectedId(null);
+  };
+
+  // ── Compose: send / save draft ────────────────────────────────────────────
+  // These reject on failure so the ComposeDrawer keeps the form open and shows
+  // its in-drawer error banner; on success they close the drawer and refresh.
+  const handleSend = async (payload: ComposePayload, count: number) => {
+    if (draft) {
+      // Editing an existing draft → persist edits, then send it via drafts.send.
+      // drafts.update assigns a NEW Gmail message id, so send that one.
+      const { message: updated } = await updateDraft(draft.gmailId, payload);
+      await sendDraft(updated.gmailId);
+    } else {
+      await sendMessage({ ...payload, threadId: replyTo?.threadId });
+    }
+    setComposeOpen(false);
+    setReplyTo(null);
+    setDraft(null);
+    showToast(`Message sent to ${count} recipient${count === 1 ? "" : "s"}.`);
+    loadFirstPage();
+  };
+  const handleSaveDraft = async (payload: ComposePayload) => {
+    if (draft) await updateDraft(draft.gmailId, payload);
+    else await createDraft({ ...payload, threadId: replyTo?.threadId });
+    setComposeOpen(false);
+    setReplyTo(null);
+    setDraft(null);
+    showToast("Draft saved.");
+    loadFirstPage();
   };
 
   // ── Global keyboard shortcuts ─────────────────────────────────────────────
@@ -624,7 +822,13 @@ export function VibeMailApp() {
       }}
     >
       <span
-        style={{ width: 7, height: 7, borderRadius: "var(--radius-full)", background: "var(--success)", flexShrink: 0 }}
+        style={{
+          width: 7,
+          height: 7,
+          borderRadius: "var(--radius-full)",
+          background: toast.tone === "error" ? "var(--danger)" : "var(--success)",
+          flexShrink: 0,
+        }}
       />
       {toast.txt}
     </div>
@@ -683,7 +887,7 @@ export function VibeMailApp() {
             }}
             messages={visible}
             loading={loading}
-            error={null}
+            error={error}
             onRetry={onRetry}
             refreshing={refreshing}
             searchMode={searchMode}
@@ -705,6 +909,9 @@ export function VibeMailApp() {
             emptyHint={filter === "all" ? "New mail will appear here in real time." : null}
             onRefresh={onRefresh}
             onCollapse={() => {}}
+            serverHasMore={!!nextCursor}
+            onLoadMore={loadMore}
+            loadingMore={loadingMore}
           />
         )}
 
@@ -716,6 +923,7 @@ export function VibeMailApp() {
             <Sidebar
               active={filter}
               counts={counts}
+              accountEmail={accountEmail}
               labels={labels}
               rail={false}
               width={270}
@@ -744,14 +952,8 @@ export function VibeMailApp() {
           replyTo={replyTo}
           draft={draft}
           onClose={() => setComposeOpen(false)}
-          onSend={(n) => {
-            setComposeOpen(false);
-            showToast(`Message sent to ${n} recipient${n === 1 ? "" : "s"}.`);
-          }}
-          onSaveDraft={() => {
-            setComposeOpen(false);
-            showToast("Draft saved.");
-          }}
+          onSend={handleSend}
+          onSaveDraft={handleSaveDraft}
           onDeleteDraft={() => deleteDraft(draft)}
         />
 
@@ -784,6 +986,7 @@ export function VibeMailApp() {
       <Sidebar
         active={filter}
         counts={counts}
+        accountEmail={accountEmail}
         labels={labels}
         rail={layout.sidebarRail}
         width={layout.sidebarW}
@@ -815,7 +1018,7 @@ export function VibeMailApp() {
             fill={layout.readCollapsed}
             messages={visible}
             loading={loading}
-            error={null}
+            error={error}
             onRetry={onRetry}
             refreshing={refreshing}
             searchMode={searchMode}
@@ -844,6 +1047,9 @@ export function VibeMailApp() {
             labelOptions={labels}
             onAddLabel={addLabelToMessage}
             onRemoveLabel={removeLabelFromMessage}
+            serverHasMore={!!nextCursor}
+            onLoadMore={loadMore}
+            loadingMore={loadingMore}
           />
         )}
 
@@ -902,14 +1108,8 @@ export function VibeMailApp() {
           replyTo={replyTo}
           draft={draft}
           onClose={() => setComposeOpen(false)}
-          onSend={(n) => {
-            setComposeOpen(false);
-            showToast(`Message sent to ${n} recipient${n === 1 ? "" : "s"}.`);
-          }}
-          onSaveDraft={() => {
-            setComposeOpen(false);
-            showToast("Draft saved.");
-          }}
+          onSend={handleSend}
+          onSaveDraft={handleSaveDraft}
           onDeleteDraft={() => deleteDraft(draft)}
         />
 

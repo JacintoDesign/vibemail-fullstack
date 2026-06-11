@@ -20,15 +20,22 @@ interface Recipient {
   locked?: boolean;
 }
 
+export interface ComposePayload {
+  to: string;
+  subject: string;
+  body: string;
+}
+
 export interface ComposeDrawerProps {
   open: boolean;
   replyTo?: Message | null;
   draft?: Message | null;
-  simulateFail?: boolean;
   onClose: () => void;
-  onSend: (recipientCount: number) => void;
-  onSaveDraft?: () => void;
-  onDeleteDraft?: () => void;
+  /** Send the message. Rejecting surfaces the in-drawer "couldn't send" banner. */
+  onSend: (payload: ComposePayload, recipientCount: number) => Promise<void>;
+  /** Persist a draft. Rejecting surfaces the in-drawer error banner. */
+  onSaveDraft?: (payload: ComposePayload) => Promise<void>;
+  onDeleteDraft?: () => void | Promise<void>;
   mobile?: boolean;
 }
 
@@ -149,7 +156,6 @@ export function ComposeDrawer({
   open,
   replyTo,
   draft,
-  simulateFail,
   onClose,
   onSend,
   onSaveDraft,
@@ -164,7 +170,7 @@ export function ComposeDrawer({
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
   const [validationError, setValidationError] = useState(false);
-  const [sendError, setSendError] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [dragH, setDragH] = useState<number | null>(null);
   const drawerRef = useRef<HTMLDivElement>(null);
   const toInputRef = useRef<HTMLInputElement>(null);
@@ -189,7 +195,7 @@ export function ComposeDrawer({
       setToDraft("");
     }
     setValidationError(false);
-    setSendError(false);
+    setActionError(null);
     setSending(false);
     setDragH(null);
   }, [open, reply, replyTo, editingDraft, draft]);
@@ -232,22 +238,49 @@ export function ComposeDrawer({
     window.addEventListener("pointerup", up);
   };
 
-  const send = () => {
-    setSendError(false);
-    if (recipients.length === 0 || !subject.trim()) {
+  // The recipient may be sitting uncommitted in the input — fold it in so the
+  // user doesn't have to press Enter before sending.
+  const effectiveTo = (): string => recipients[0]?.email ?? toDraft.trim();
+  const buildPayload = (): ComposePayload => ({
+    to: effectiveTo(),
+    subject: subject.trim(),
+    body,
+  });
+  const isValid = (): boolean => !!effectiveTo() && !!subject.trim() && !!body.trim();
+
+  const send = async () => {
+    setActionError(null);
+    if (!isValid()) {
       setValidationError(true);
       return;
     }
     setValidationError(false);
     setSending(true);
-    setTimeout(() => {
+    try {
+      await onSend(buildPayload(), Math.max(recipients.length, 1));
+      // Success: the parent closes the drawer, unmounting this component.
+    } catch {
+      setActionError("Couldn't send. Check your connection and try again.");
+    } finally {
       setSending(false);
-      if (simulateFail) {
-        setSendError(true);
-        return;
-      }
-      onSend(recipients.length);
-    }, 900);
+    }
+  };
+
+  const saveDraft = async () => {
+    setActionError(null);
+    if (!isValid()) {
+      setValidationError(true);
+      return;
+    }
+    setValidationError(false);
+    setSending(true);
+    try {
+      await onSaveDraft?.(buildPayload());
+    } catch {
+      setActionError("Couldn't save the draft. Check your connection and try again.");
+    } finally {
+      setSending(false);
+    }
   };
 
   if (!open) return null;
@@ -354,9 +387,9 @@ export function ComposeDrawer({
             gap: mobile ? 7 : 10,
           }}
         >
-          {sendError ? (
+          {actionError ? (
             <Banner tone="error" action="Try again" onAction={send}>
-              Couldn&apos;t send. Check your connection and try again.
+              {actionError}
             </Banner>
           ) : null}
           {validationError ? (
@@ -469,7 +502,7 @@ export function ComposeDrawer({
               </Button>
             </div>
             <div style={{ flex: 1, display: "flex" }}>
-              <Button variant="secondary" fullWidth disabled={sending} onClick={() => onSaveDraft?.()}>
+              <Button variant="secondary" fullWidth disabled={sending} onClick={saveDraft}>
                 Save draft
               </Button>
             </div>
@@ -496,7 +529,7 @@ export function ComposeDrawer({
             <Button variant="primary" icon="send" disabled={sending} onClick={send}>
               {sending ? "Sending…" : "Send"}
             </Button>
-            <Button variant="secondary" disabled={sending} onClick={() => onSaveDraft?.()}>
+            <Button variant="secondary" disabled={sending} onClick={saveDraft}>
               Save draft
             </Button>
             {editingDraft ? (

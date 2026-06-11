@@ -53,6 +53,12 @@ export interface MessageListProps {
   labelOptions?: string[];
   onAddLabel?: (id: string, label: string) => void;
   onRemoveLabel?: (id: string, label: string) => void;
+  /** The server reports more pages beyond what's loaded (cursor pagination). */
+  serverHasMore?: boolean;
+  /** Fetch the next server page once the client-side slice is exhausted. */
+  onLoadMore?: () => void;
+  /** A server page fetch is in flight. */
+  loadingMore?: boolean;
 }
 
 function ReadToggle({ value, onChange }: { value: ReadFilter; onChange: (v: ReadFilter) => void }) {
@@ -219,6 +225,9 @@ export function MessageList({
   labelOptions,
   onAddLabel,
   onRemoveLabel,
+  serverHasMore,
+  onLoadMore,
+  loadingMore,
 }: MessageListProps) {
   const [visibleCount, setVisibleCount] = useState(VM_PAGE_SIZE);
 
@@ -228,7 +237,8 @@ export function MessageList({
   }, [folderTitle, searchMode, query]);
 
   const visibleMessages = messages.slice(0, visibleCount);
-  const hasMore = messages.length > visibleCount;
+  const canExpandClient = messages.length > visibleCount;
+  const showLoadMore = canExpandClient || !!serverHasMore;
 
   const containerStyle: CSSProperties = {
     width: fill ? "auto" : "var(--list-w)",
@@ -411,14 +421,20 @@ export function MessageList({
                 onRemoveLabel={mobile ? undefined : (label) => onRemoveLabel?.(m.id, label)}
               />
             ))}
-            {hasMore && (
+            {showLoadMore && (
               <div style={{ display: "flex", justifyContent: "center", padding: "8px 0 4px" }}>
                 <Button
                   variant="secondary"
                   icon="chevronDown"
-                  onClick={() => setVisibleCount((c) => c + VM_PAGE_SIZE)}
+                  disabled={loadingMore}
+                  onClick={() => {
+                    // Reveal more of what's already loaded first; only hit the
+                    // server (next cursor page) once the client slice is spent.
+                    if (canExpandClient) setVisibleCount((c) => c + VM_PAGE_SIZE);
+                    else onLoadMore?.();
+                  }}
                 >
-                  Load more
+                  {loadingMore ? "Loading…" : "Load more"}
                 </Button>
               </div>
             )}

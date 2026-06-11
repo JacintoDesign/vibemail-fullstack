@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "web:dev"],
       "port": 3000
+    },
+    {
+      "name": "vibemail-fullstack",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vercel", "dev", "--listen", "3000", "--yes"],
+      "port": 3000
     }
   ]
 }
