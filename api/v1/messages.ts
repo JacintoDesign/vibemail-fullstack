@@ -101,7 +101,7 @@ async function handleSend(req: VercelRequest, res: VercelResponse): Promise<void
   }
 
   const body = req.body as Record<string, unknown>;
-  const { to, subject, body: msgBody, threadId } = body ?? {};
+  const { to, subject, body: msgBody, threadId, attachmentIds } = body ?? {};
 
   // Validate required fields.
   if (!to || !subject || !msgBody) {
@@ -128,12 +128,23 @@ async function handleSend(req: VercelRequest, res: VercelResponse): Promise<void
     return;
   }
 
+  // Optional attachmentIds — must be an array of strings when present.
+  let ids: string[] | undefined;
+  if (attachmentIds !== undefined) {
+    if (!Array.isArray(attachmentIds) || !attachmentIds.every((x) => typeof x === 'string')) {
+      errorResponse(res, 400, 'MISSING_FIELDS', 'attachmentIds must be an array of strings');
+      return;
+    }
+    ids = attachmentIds as string[];
+  }
+
   try {
     const message = await sendMessage(payload.sub, {
       to,
       subject,
       body: msgBody,
       threadId: typeof threadId === 'string' ? threadId : undefined,
+      attachmentIds: ids,
     });
 
     res.status(201).json({ message });

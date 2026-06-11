@@ -27,7 +27,8 @@ export interface SendMessageOptions {
   to:        string;
   subject:   string;
   body:      string;
-  threadId?: string;   // omit for new compose; include for threaded reply
+  threadId?: string;        // omit for new compose; include for threaded reply
+  attachmentIds?: string[]; // ids from POST /api/v1/attachments to attach
 }
 
 // ── Error ────────────────────────────────────────────────────────────────────

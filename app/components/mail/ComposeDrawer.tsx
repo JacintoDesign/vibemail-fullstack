@@ -12,6 +12,7 @@ import {
 } from "react";
 import { Banner, Button, Icon, IconButton, Input, RecipientTag, Textarea } from "@/components/ds";
 import type { Message } from "@/lib/types";
+import { uploadAttachment } from "@/lib/api";
 import { MessageCard } from "./MessageCard";
 
 interface Recipient {
@@ -24,6 +25,106 @@ export interface ComposePayload {
   to: string;
   subject: string;
   body: string;
+  attachmentIds: string[];
+}
+
+/** Max upload size — mirrors the backend's 25 MB limit (CONTRACT.md §4.12). */
+const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+
+type AttachmentStatus = "uploading" | "done" | "error";
+
+/** One row in the compose drawer's attachment tray. */
+interface AttachmentItem {
+  localId: string;
+  name: string;
+  size: number;
+  status: AttachmentStatus;
+  /** Set once the upload succeeds; sent to POST /messages. */
+  attachmentId?: string;
+  /** Short reason shown on an error chip. */
+  error?: string;
+  /** Kept so a failed upload can be retried. */
+  file: File;
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const chipBtnStyle: CSSProperties = {
+  display: "inline-flex",
+  flexShrink: 0,
+  padding: 0,
+  border: "none",
+  background: "transparent",
+  color: "inherit",
+  cursor: "pointer",
+  lineHeight: 1,
+};
+
+/** A single attachment chip: spinner while uploading, red + retry on failure. */
+function AttachmentChip({
+  item,
+  onRemove,
+  onRetry,
+}: {
+  item: AttachmentItem;
+  onRemove: () => void;
+  onRetry: () => void;
+}) {
+  const uploading = item.status === "uploading";
+  const error = item.status === "error";
+  return (
+    <span
+      title={error ? `${item.name} — ${item.error ?? "failed"}` : item.name}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        maxWidth: "100%",
+        padding: "3px 8px",
+        background: "var(--glass-2)",
+        border: `1px solid ${error ? "var(--danger)" : "var(--border-default)"}`,
+        borderRadius: "var(--radius-full)",
+        fontFamily: "var(--font-mono)",
+        fontSize: "var(--text-caption)",
+        color: error ? "var(--danger)" : "var(--text-secondary)",
+      }}
+    >
+      {uploading ? (
+        <span
+          aria-label="Uploading"
+          style={{ display: "inline-flex", color: "var(--text-faint)", animation: "vmSpin 0.8s linear infinite" }}
+        >
+          <Icon name="refresh" size={12} />
+        </span>
+      ) : (
+        <Icon name="paperclip" size={12} color={error ? "var(--danger)" : "var(--text-faint)"} />
+      )}
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 180 }}>
+        {item.name}
+      </span>
+      <span style={{ flexShrink: 0, color: error ? "var(--danger)" : "var(--text-faint)" }}>
+        {error ? (item.error ?? "failed") : formatBytes(item.size)}
+      </span>
+      {error ? (
+        <button type="button" aria-label={`Retry ${item.name}`} title="Retry" onClick={onRetry} style={chipBtnStyle}>
+          <Icon name="refresh" size={12} />
+        </button>
+      ) : null}
+      <button
+        type="button"
+        aria-label={`Remove ${item.name}`}
+        title="Remove"
+        onClick={onRemove}
+        style={{ ...chipBtnStyle, color: "var(--text-faint)", fontSize: 13 }}
+      >
+        ✕
+      </button>
+    </span>
+  );
 }
 
 export interface ComposeDrawerProps {
@@ -172,8 +273,12 @@ export function ComposeDrawer({
   const [validationError, setValidationError] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [dragH, setDragH] = useState<number | null>(null);
+  const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
   const drawerRef = useRef<HTMLDivElement>(null);
   const toInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const uploading = attachments.some((a) => a.status === "uploading");
 
   useEffect(() => {
     if (!open) return;
@@ -198,7 +303,52 @@ export function ComposeDrawer({
     setActionError(null);
     setSending(false);
     setDragH(null);
+    setAttachments([]);
   }, [open, reply, replyTo, editingDraft, draft]);
+
+  // ── Attachments ───────────────────────────────────────────────────────────
+  const uploadItem = (item: AttachmentItem) => {
+    if (item.size > MAX_ATTACHMENT_BYTES) {
+      setAttachments((prev) =>
+        prev.map((a) => (a.localId === item.localId ? { ...a, status: "error", error: "too large" } : a)),
+      );
+      return;
+    }
+    setAttachments((prev) =>
+      prev.map((a) => (a.localId === item.localId ? { ...a, status: "uploading", error: undefined } : a)),
+    );
+    uploadAttachment(item.file)
+      .then((res) =>
+        setAttachments((prev) =>
+          prev.map((a) =>
+            a.localId === item.localId ? { ...a, status: "done", attachmentId: res.attachmentId } : a,
+          ),
+        ),
+      )
+      .catch(() =>
+        setAttachments((prev) =>
+          prev.map((a) => (a.localId === item.localId ? { ...a, status: "error", error: "failed" } : a)),
+        ),
+      );
+  };
+
+  const onFilesPicked = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const items: AttachmentItem[] = Array.from(files).map((file, i) => ({
+      localId: `${Date.now()}-${i}-${file.name}-${file.size}`,
+      name: file.name,
+      size: file.size,
+      status: "uploading",
+      file,
+    }));
+    setAttachments((prev) => [...prev, ...items]);
+    items.forEach(uploadItem);
+    // Reset so picking the same file again still fires onChange.
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeAttachment = (localId: string) =>
+    setAttachments((prev) => prev.filter((a) => a.localId !== localId));
 
   const addRecipient = (raw: string) => {
     const v = raw.trim().replace(/[,;]$/, "");
@@ -245,6 +395,9 @@ export function ComposeDrawer({
     to: effectiveTo(),
     subject: subject.trim(),
     body,
+    attachmentIds: attachments
+      .filter((a) => a.status === "done" && a.attachmentId)
+      .map((a) => a.attachmentId as string),
   });
   const isValid = (): boolean => !!effectiveTo() && !!subject.trim() && !!body.trim();
 
@@ -481,6 +634,19 @@ export function ComposeDrawer({
             style={{ flex: 1, minHeight: 160, padding: mobile ? "8px" : "12px" }}
           />
 
+          {attachments.length ? (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {attachments.map((a) => (
+                <AttachmentChip
+                  key={a.localId}
+                  item={a}
+                  onRemove={() => removeAttachment(a.localId)}
+                  onRetry={() => uploadItem(a)}
+                />
+              ))}
+            </div>
+          ) : null}
+
           {reply && !editingDraft && !mobile && replyTo ? <QuotedThread replyTo={replyTo} /> : null}
         </div>
 
@@ -497,8 +663,8 @@ export function ComposeDrawer({
             }}
           >
             <div style={{ flex: 1, display: "flex" }}>
-              <Button variant="primary" icon="send" fullWidth disabled={sending} onClick={send}>
-                {sending ? "Sending…" : "Send"}
+              <Button variant="primary" icon="send" fullWidth disabled={sending || uploading} onClick={send}>
+                {sending ? "Sending…" : uploading ? "Uploading…" : "Send"}
               </Button>
             </div>
             <div style={{ flex: 1, display: "flex" }}>
@@ -526,8 +692,8 @@ export function ComposeDrawer({
               borderTop: "1px solid var(--border-hairline)",
             }}
           >
-            <Button variant="primary" icon="send" disabled={sending} onClick={send}>
-              {sending ? "Sending…" : "Send"}
+            <Button variant="primary" icon="send" disabled={sending || uploading} onClick={send}>
+              {sending ? "Sending…" : uploading ? "Uploading…" : "Send"}
             </Button>
             <Button variant="secondary" disabled={sending} onClick={saveDraft}>
               Save draft
@@ -544,7 +710,19 @@ export function ComposeDrawer({
               </Button>
             ) : null}
             <div style={{ flex: 1 }} />
-            <IconButton icon="paperclip" variant="ghost" label="Attach" />
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              hidden
+              onChange={(e) => onFilesPicked(e.target.files)}
+            />
+            <IconButton
+              icon="paperclip"
+              variant="ghost"
+              label="Attach files"
+              onClick={() => fileInputRef.current?.click()}
+            />
           </div>
         )}
       </div>

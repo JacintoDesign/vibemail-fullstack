@@ -295,10 +295,11 @@ Content-Type: application/json
 
 Body:
 {
-  to:        string    required   Recipient email address (RFC 5321)
-  subject:   string    required   Email subject line
-  body:      string    required   Message body — plain text or HTML
-  threadId?: string    optional   Existing Gmail thread ID; include to reply in-thread
+  to:             string    required   Recipient email address (RFC 5321)
+  subject:        string    required   Email subject line
+  body:           string    required   Message body — plain text or HTML
+  threadId?:      string    optional   Existing Gmail thread ID; include to reply in-thread
+  attachmentIds?: string[]  optional   IDs returned by POST /api/v1/attachments to attach
 }
 ```
 
@@ -642,10 +643,13 @@ Body: none required
 
 ### 4.12 Attachment Upload — `POST /api/v1/attachments`
 
-Accepts a single file via multipart upload, stores it server-side, and returns an
-opaque `attachmentId`. The id is later referenced when composing or sending a
-message so the file is attached to the outgoing Gmail message. Uploading does
-**not** by itself attach the file to any message — it only stages the bytes.
+Begins an attachment upload by returning a short-lived **signed upload URL**. The
+client then PUTs the file bytes **directly to Supabase Storage** — the bytes
+never transit the serverless function, so the platform's ~4.5 MB request-body
+limit does not apply and uploads up to 25 MB work in production. The returned
+`attachmentId` is later referenced in the `attachmentIds` array of
+`POST /api/v1/messages`. Uploading does **not** by itself attach the file to any
+message — it only stages the bytes.
 
 #### Request
 
@@ -653,32 +657,43 @@ message so the file is attached to the outgoing Gmail message. Uploading does
 Method:       POST
 Path:         /api/v1/attachments
 Auth:         Authorization: Bearer <jwt>   required
-Content-Type: multipart/form-data
+Content-Type: application/json
 
-Body (multipart form fields):
-  file   binary   required   The file to upload. Hard limit 25 MB (26214400 bytes).
+Body:
+{
+  filename: string   required   Original filename
+  size:     number   required   File size in bytes; rejected if > 25 MB (26214400)
+}
 ```
 
 #### Response — 201 Created
 
 ```typescript
 {
-  attachmentId: string   // opaque id used to reference this upload when sending
-  filename:     string   // original client-supplied filename
-  mimeType:     string   // detected content type of the upload
-  size:         number    // size in bytes
+  attachmentId: string   // opaque id (storage path) to reference this upload when sending
+  uploadUrl:    string   // absolute, short-lived signed URL — PUT the raw file bytes here
 }
 ```
+
+#### Upload step (client → Supabase Storage, not this API)
+
+```
+PUT <uploadUrl>
+Content-Type: <the file's content type>
+Body: <raw file bytes>
+```
+
+The bucket enforces the 25 MB per-file limit, so a client that under-declares
+`size` is still capped at upload time.
 
 #### Typed error cases
 
 | HTTP | `error.code` | Condition |
 |---|---|---|
-| 400 | `MISSING_FILE` | No `file` part is present in the multipart body |
+| 400 | `MISSING_FIELDS` | `filename` is absent/empty, or `size` is not a positive number |
 | 401 | `UNAUTHORIZED` | JWT is missing, malformed, expired, or signature invalid |
-| 413 | `FILE_TOO_LARGE` | The uploaded file exceeds the 25 MB (26214400-byte) limit |
-| 415 | `UNSUPPORTED_MEDIA_TYPE` | Request `Content-Type` is not `multipart/form-data` |
-| 500 | `UPLOAD_FAILED` | The upload could not be persisted server-side |
+| 413 | `FILE_TOO_LARGE` | The declared `size` exceeds the 25 MB (26214400-byte) limit |
+| 500 | `UPLOAD_FAILED` | The signed upload URL could not be created |
 
 ---
 

@@ -188,12 +188,43 @@ export function getThread(threadId: string): Promise<{ threadId: string; message
   return apiFetch(`/threads/${encodeURIComponent(threadId)}`);
 }
 
-/** POST /api/v1/messages — compose + send (optionally in-thread). */
+/** Resolved attachment after a successful upload. */
+export interface UploadedAttachment {
+  attachmentId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+}
+
+/**
+ * Upload a file in two steps so it isn't capped by the serverless request-body
+ * limit: (1) ask the backend for a signed Storage upload URL, then (2) PUT the
+ * bytes straight to Supabase Storage. Returns the opaque attachmentId to send.
+ */
+export async function uploadAttachment(file: File): Promise<UploadedAttachment> {
+  const mimeType = file.type || "application/octet-stream";
+  const { attachmentId, uploadUrl } = await apiFetch<{ attachmentId: string; uploadUrl: string }>(
+    `/attachments`,
+    { method: "POST", body: JSON.stringify({ filename: file.name, size: file.size }) },
+  );
+  const put = await fetch(uploadUrl, {
+    method: "PUT",
+    body: file,
+    headers: { "Content-Type": mimeType, "x-upsert": "true" },
+  });
+  if (!put.ok) {
+    throw new Error(`Storage upload failed (${put.status})`);
+  }
+  return { attachmentId, filename: file.name, mimeType, size: file.size };
+}
+
+/** POST /api/v1/messages — compose + send (optionally in-thread, with attachments). */
 export function sendMessage(body: {
   to: string;
   subject: string;
   body: string;
   threadId?: string;
+  attachmentIds?: string[];
 }): Promise<{ message: ApiMessage }> {
   return apiFetch(`/messages`, { method: "POST", body: JSON.stringify(body) });
 }
