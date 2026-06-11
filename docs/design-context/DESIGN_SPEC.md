@@ -172,15 +172,34 @@ Replaces the placeholder when a row is opened.
   widths via container query), a row of action icon buttons, a collapse button,
   and a meta line showing "*N* messages" plus status/label badges (a warning
   **Draft** badge, a **Sent** badge, label chips).
-- **Actions** are folder-aware:
-  - Inbox: Mark unread · Star · Archive · Delete (→ Trash) · Pop out.
-  - Archive: Move to Inbox · Mark unread · Star · Delete · Pop out.
-  - Trash: Restore to Inbox · Star · Delete forever · Pop out.
+- **Actions** are folder-aware (every non-draft set includes a **View in Gmail**
+  link — see below):
+  - Inbox: Mark unread · Star · View in Gmail · Archive · Delete (→ Trash) · Pop out.
+  - Archive: Move to Inbox · Mark unread · Star · View in Gmail · Delete · Pop out.
+  - Trash: Restore to Inbox · Star · View in Gmail · Delete forever · Pop out.
   - Draft: a single **Edit draft** primary button.
+- **View in Gmail** is an external-link icon button that opens the conversation
+  in Gmail's web client in a new tab (`mail.google.com/mail/u/0/#all/<threadId>`,
+  `rel="noreferrer noopener"`). It appears in every folder's action set except
+  Draft.
 - **Messages** stack oldest-first as collapsible glass cards; the most recent
   is expanded, earlier ones collapsed to a single preview line. Each card
-  header shows sender · email · date · chevron; clicking it (or the chevron)
-  toggles expansion. Expanded bodies render `pre-wrap`.
+  header shows sender · email · date, a **Plain / HTML** view toggle (expanded
+  cards only — see *Body rendering*), and a chevron; clicking the header (or the
+  chevron) toggles expansion.
+- **Body rendering**: the plain-text body is the default, rendered monospace
+  with `pre-wrap`. When the message also carries an HTML body, the expanded card
+  header shows a **Plain / HTML** segmented toggle that switches *that* message
+  between the plain-text render and the HTML. HTML is shown in a locked-down
+  sandboxed `<iframe>` (`sandbox` with no `allow-*` tokens — no scripts, forms,
+  popups, or same-origin access, so remote markup can't reach the app). The
+  toggle defaults to **Plain**; the HTML option is disabled when the message has
+  no HTML body, and the Plain option is disabled when it has no plain text (an
+  HTML-only message renders the iframe by default). Toggle state is **per
+  message** and resets to the default when a different thread is opened.
+  Toggling never collapses the card. An HTML-only (or HTML-selected) expanded
+  card grows to fill the reading-pane height, with the iframe scrolling
+  internally.
 - A dashed **quick-reply** affordance ("Reply to *Sender*…") sits below the
   thread for non-drafts; it opens the compose drawer in reply mode.
 

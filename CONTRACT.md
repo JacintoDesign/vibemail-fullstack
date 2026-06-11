@@ -22,6 +22,7 @@
    - [4.9 Draft Update](#49-draft-update----patch-apiv1draftsid)
    - [4.10 Draft Delete](#410-draft-delete----delete-apiv1draftsid)
    - [4.11 Draft Send](#411-draft-send----post-apiv1draftsidsend)
+   - [4.12 Attachment Upload](#412-attachment-upload----post-apiv1attachments)
 
 ---
 
@@ -636,6 +637,48 @@ Body: none required
 | 404 | `DRAFT_NOT_FOUND` | No draft with `:id` exists for the authenticated user |
 | 429 | `GMAIL_RATE_LIMITED` | Gmail API responded with HTTP 429 |
 | 502 | `GMAIL_DRAFT_FAILED` | Gmail `drafts.send` returned any other non-2xx status |
+
+---
+
+### 4.12 Attachment Upload — `POST /api/v1/attachments`
+
+Accepts a single file via multipart upload, stores it server-side, and returns an
+opaque `attachmentId`. The id is later referenced when composing or sending a
+message so the file is attached to the outgoing Gmail message. Uploading does
+**not** by itself attach the file to any message — it only stages the bytes.
+
+#### Request
+
+```
+Method:       POST
+Path:         /api/v1/attachments
+Auth:         Authorization: Bearer <jwt>   required
+Content-Type: multipart/form-data
+
+Body (multipart form fields):
+  file   binary   required   The file to upload. Hard limit 25 MB (26214400 bytes).
+```
+
+#### Response — 201 Created
+
+```typescript
+{
+  attachmentId: string   // opaque id used to reference this upload when sending
+  filename:     string   // original client-supplied filename
+  mimeType:     string   // detected content type of the upload
+  size:         number    // size in bytes
+}
+```
+
+#### Typed error cases
+
+| HTTP | `error.code` | Condition |
+|---|---|---|
+| 400 | `MISSING_FILE` | No `file` part is present in the multipart body |
+| 401 | `UNAUTHORIZED` | JWT is missing, malformed, expired, or signature invalid |
+| 413 | `FILE_TOO_LARGE` | The uploaded file exceeds the 25 MB (26214400-byte) limit |
+| 415 | `UNSUPPORTED_MEDIA_TYPE` | Request `Content-Type` is not `multipart/form-data` |
+| 500 | `UPLOAD_FAILED` | The upload could not be persisted server-side |
 
 ---
 
