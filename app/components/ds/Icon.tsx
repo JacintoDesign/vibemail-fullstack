@@ -7,6 +7,7 @@ import {
   ChevronDown,
   Inbox,
   Mail,
+  MailOpen,
   Paperclip,
   Reply,
   RotateCw,
@@ -29,6 +30,7 @@ export type IconName =
   | "trash"
   | "reply"
   | "mail"
+  | "mailOpen"
   | "settings"
   | "inbox"
   | "send"
@@ -46,6 +48,7 @@ const MAP: Record<Exclude<IconName, "dot">, LucideIcon> = {
   trash: Trash2,
   reply: Reply,
   mail: Mail,
+  mailOpen: MailOpen,
   settings: Settings,
   inbox: Inbox,
   send: Send,

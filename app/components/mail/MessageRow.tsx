@@ -7,6 +7,7 @@
 import { useState, type MouseEvent } from "react";
 import { Badge, Icon } from "@/components/ds";
 import type { Message } from "@/lib/types";
+import { LabelPicker } from "./LabelPicker";
 
 export interface MessageRowProps {
   m: Message;
@@ -15,6 +16,36 @@ export interface MessageRowProps {
   onOpen: (m: Message) => void;
   onToggleRead: () => void;
   onToggleStar: () => void;
+  /** Multiselect: show the leading checkbox. */
+  selectable?: boolean;
+  /** Multiselect: this row is checked. */
+  checked?: boolean;
+  /** Multiselect: a selection exists, so pin all checkboxes visible. */
+  selectionActive?: boolean;
+  onToggleSelect?: () => void;
+  /** Labels available to add via the per-row "+" picker. */
+  availableLabels?: string[];
+  onAddLabel?: (label: string) => void;
+  /** Remove a label from this message (shows an "x" on each badge on hover). */
+  onRemoveLabel?: (label: string) => void;
+}
+
+function CheckGlyph() {
+  return (
+    <svg
+      width="11"
+      height="11"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="3.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
 }
 
 export function MessageRow({
@@ -24,9 +55,21 @@ export function MessageRow({
   onOpen,
   onToggleRead,
   onToggleStar,
+  selectable,
+  checked,
+  selectionActive,
+  onToggleSelect,
+  availableLabels,
+  onAddLabel,
+  onRemoveLabel,
 }: MessageRowProps) {
   const [hover, setHover] = useState(false);
+  const [labelMenuOpen, setLabelMenuOpen] = useState(false);
   const unread = !m.isRead;
+  const active = selected || checked;
+  const showCheckbox = selectable && (checked || selectionActive || hover);
+  const hasLabels = !!m.labels && m.labels.length > 0;
+  const canAddLabels = !!onAddLabel && !!availableLabels && availableLabels.length > 0;
   const stop = (fn: () => void) => (e: MouseEvent) => {
     e.stopPropagation();
     fn();
@@ -46,15 +89,15 @@ export function MessageRow({
         padding: compact ? "8px" : "var(--card-pad)",
         cursor: "pointer",
         borderRadius: "var(--radius-md)",
-        border: `1px solid ${selected ? "var(--accent)" : "var(--border-hairline)"}`,
-        background: selected
+        border: `1px solid ${active ? "var(--accent)" : "var(--border-hairline)"}`,
+        background: active
           ? "var(--accent-soft)"
           : hover
             ? "var(--glass-hover)"
             : unread
               ? "var(--glass-1)"
               : "var(--glass-0)",
-        boxShadow: selected
+        boxShadow: active
           ? "var(--shadow-1), inset 0 1px 0 var(--border-top-sheen)"
           : "inset 0 1px 0 var(--border-top-sheen)",
         WebkitBackdropFilter: "var(--glass-blur-0)",
@@ -63,8 +106,32 @@ export function MessageRow({
           "background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard)",
       }}
     >
-      {/* Row 1 — sender · unread dot · star · date */}
+      {/* Row 1 — [select] · sender · unread dot · star · date */}
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        {showCheckbox ? (
+          <button
+            type="button"
+            aria-label={checked ? "Deselect message" : "Select message"}
+            aria-pressed={checked}
+            onClick={stop(onToggleSelect ?? (() => {}))}
+            style={{
+              flexShrink: 0,
+              width: 18,
+              height: 18,
+              padding: 0,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              borderRadius: 4,
+              border: `1.5px solid ${checked ? "var(--accent)" : "var(--border-strong)"}`,
+              background: checked ? "var(--accent)" : "transparent",
+              color: "var(--on-accent)",
+            }}
+          >
+            {checked ? <CheckGlyph /> : null}
+          </button>
+        ) : null}
         <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
           <span
             style={{
@@ -160,12 +227,30 @@ export function MessageRow({
         {m.snippet}
       </div>
 
-      {/* Row 4 — labels */}
-      {!compact && m.labels && m.labels.length > 0 ? (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 1 }}>
-          {m.labels.map((l) => (
-            <Badge key={l}>{l}</Badge>
+      {/* Row 4 — labels + hover "+" adder. Rendered when there are labels to
+          show, or (for label-less cards) only while hovering or the menu is open. */}
+      {!compact && (hasLabels || (canAddLabels && (hover || labelMenuOpen))) ? (
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginTop: 1 }}>
+          {(m.labels || []).map((l) => (
+            <Badge
+              key={l}
+              onRemove={onRemoveLabel ? () => onRemoveLabel(l) : undefined}
+              removeVisible={hover}
+              removeLabel={`Remove ${l} label`}
+            >
+              {l}
+            </Badge>
           ))}
+          {canAddLabels ? (
+            <LabelPicker
+              visible={hover || labelMenuOpen}
+              open={labelMenuOpen}
+              onOpenChange={setLabelMenuOpen}
+              appliedLabels={m.labels || []}
+              allLabels={availableLabels ?? []}
+              onAdd={(l) => onAddLabel?.(l)}
+            />
+          ) : null}
         </div>
       ) : null}
     </div>

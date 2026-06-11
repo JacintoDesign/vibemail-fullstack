@@ -6,6 +6,7 @@
 // tweaks panel and its demo-state / simulate-send-fail knobs are dropped.
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { BulkActionBar, type BulkAction } from "@/components/mail/BulkActionBar";
 import { ComposeDrawer } from "@/components/mail/ComposeDrawer";
 import { MessageList } from "@/components/mail/MessageList";
 import type { ReadFilter } from "@/components/mail/MessageList";
@@ -133,6 +134,7 @@ export function VibeMailApp() {
   const [filter, setFilter] = useState("all");
   const [readFilter, setReadFilter] = useState<ReadFilter>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [searchMode, setSearchMode] = useState(false);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
@@ -208,6 +210,123 @@ export function VibeMailApp() {
     setMessages((ms) => ms.map((m) => (m.id === id ? { ...m, ...patch } : m)));
   const selected = useMemo(() => messages.find((m) => m.id === selectedId) || null, [messages, selectedId]);
 
+  // ── Multiselect ───────────────────────────────────────────────────────────
+  const selectionActive = selectedIds.size > 0;
+  const allVisibleSelected = visible.length > 0 && visible.every((m) => selectedIds.has(m.id));
+  const toggleSelect = (id: string) =>
+    setSelectedIds((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  const clearSelection = () => setSelectedIds(new Set());
+  const selectAllVisible = () => setSelectedIds(new Set(visible.map((m) => m.id)));
+  // Drop the selection whenever the folder or search context changes.
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [filter, searchMode]);
+
+  const mutateSelected = (fn: (m: Message) => Message) =>
+    setMessages((ms) => ms.map((m) => (selectedIds.has(m.id) ? fn(m) : m)));
+  const removeSelected = () => setMessages((ms) => ms.filter((m) => !selectedIds.has(m.id)));
+
+  const bulkArchive = () => {
+    const n = selectedIds.size;
+    mutateSelected((m) => ({
+      ...m,
+      status: "archived",
+      labelIds: (m.labelIds || []).filter((l) => l !== "INBOX"),
+    }));
+    clearSelection();
+    showToast(`${n} archived.`);
+  };
+  const bulkRestore = () => {
+    const n = selectedIds.size;
+    mutateSelected((m) => ({
+      ...m,
+      status: "inbox",
+      labelIds: Array.from(new Set([...(m.labelIds || []).filter((l) => l !== "TRASH"), "INBOX"])),
+    }));
+    clearSelection();
+    showToast(`${n} moved to Inbox.`);
+  };
+  const bulkTrash = () => {
+    const n = selectedIds.size;
+    mutateSelected((m) => ({ ...m, status: "trash", labelIds: ["TRASH"] }));
+    clearSelection();
+    showToast(`${n} moved to Trash.`);
+  };
+  const bulkDeleteForever = () => {
+    const n = selectedIds.size;
+    removeSelected();
+    clearSelection();
+    showToast(`${n} permanently deleted.`);
+  };
+  const bulkMarkRead = (read: boolean) => {
+    const n = selectedIds.size;
+    mutateSelected((m) => ({
+      ...m,
+      isRead: read,
+      labelIds: read
+        ? (m.labelIds || []).filter((l) => l !== "UNREAD")
+        : Array.from(new Set([...(m.labelIds || []), "UNREAD"])),
+    }));
+    clearSelection();
+    showToast(`${n} marked ${read ? "read" : "unread"}.`);
+  };
+  // Per-message label add (row "+" picker). Phase-1 preview only — no
+  // add/remove-label endpoint exists in CONTRACT.md yet.
+  const addLabelToMessage = (id: string, label: string) => {
+    setMessages((ms) =>
+      ms.map((m) =>
+        m.id === id ? { ...m, labels: Array.from(new Set([...(m.labels || []), label])) } : m,
+      ),
+    );
+    showToast(`Labeled "${label}" — preview only, not yet synced.`);
+  };
+  const removeLabelFromMessage = (id: string, label: string) => {
+    setMessages((ms) =>
+      ms.map((m) => (m.id === id ? { ...m, labels: (m.labels || []).filter((l) => l !== label) } : m)),
+    );
+    showToast(`Removed "${label}" — preview only, not yet synced.`);
+  };
+
+  const readWriteActions: BulkAction[] = [
+    { key: "read", label: "Read", icon: "mailOpen", onClick: () => bulkMarkRead(true) },
+    { key: "unread", label: "Unread", icon: "mail", onClick: () => bulkMarkRead(false) },
+  ];
+  const bulkActions: BulkAction[] =
+    filter === "trash"
+      ? [
+          { key: "restore", label: "Restore", icon: "inbox", onClick: bulkRestore },
+          { key: "delete", label: "Delete forever", icon: "trash", onClick: bulkDeleteForever, danger: true },
+          ...readWriteActions,
+        ]
+      : filter === "archived"
+        ? [
+            { key: "restore", label: "Move to Inbox", icon: "inbox", onClick: bulkRestore },
+            { key: "trash", label: "Delete", icon: "trash", onClick: bulkTrash, danger: true },
+            ...readWriteActions,
+          ]
+        : filter === "drafts"
+          ? [{ key: "discard", label: "Discard", icon: "trash", onClick: bulkDeleteForever, danger: true }]
+          : [
+              { key: "archive", label: "Archive", icon: "archive", onClick: bulkArchive },
+              { key: "trash", label: "Delete", icon: "trash", onClick: bulkTrash, danger: true },
+              ...readWriteActions,
+            ];
+
+  const bulkBar = selectionActive ? (
+    <BulkActionBar
+      count={selectedIds.size}
+      allSelected={allVisibleSelected}
+      onSelectAll={selectAllVisible}
+      onClear={clearSelection}
+      actions={bulkActions}
+    />
+  ) : null;
+
   const showToast = (txt: string) => {
     setToast({ txt, tone: "success" });
     setTimeout(() => setToast(null), 2600);
@@ -265,6 +384,36 @@ export function VibeMailApp() {
       showToast("Moved to Trash.");
       setSelectedId(null);
     }
+  };
+  // Restore out of Trash or Archive back into the Inbox: drop TRASH, ensure INBOX.
+  const restoreSelected = () => {
+    if (selected) {
+      const wasTrash = selected.status === "trash";
+      update(selected.id, {
+        status: "inbox",
+        labelIds: Array.from(
+          new Set([...(selected.labelIds || []).filter((l) => l !== "TRASH"), "INBOX"]),
+        ),
+      });
+      showToast(wasTrash ? "Restored to Inbox." : "Moved to Inbox.");
+      setSelectedId(null);
+    }
+  };
+  // Permanent delete from Trash — removes the row entirely.
+  const deleteForeverSelected = () => {
+    if (selected) {
+      setMessages((ms) => ms.filter((m) => m.id !== selected.id));
+      showToast("Permanently deleted.");
+      setSelectedId(null);
+    }
+  };
+  // Discard a draft — drops the row; closes the compose drawer if it was editing it.
+  const deleteDraft = (m: Message | null) => {
+    if (!m) return;
+    setMessages((ms) => ms.filter((x) => x.id !== m.id));
+    setComposeOpen(false);
+    setDraft(null);
+    showToast("Draft discarded.");
   };
 
   const sidebarSettings = {
@@ -342,6 +491,8 @@ export function VibeMailApp() {
             onMarkUnread={markUnreadAndClose}
             onArchive={archiveSelected}
             onTrash={trashSelected}
+            onRestore={restoreSelected}
+            onDeleteForever={deleteForeverSelected}
             onEditDraft={() => {
               setReplyTo(null);
               setDraft(selected);
@@ -430,6 +581,7 @@ export function VibeMailApp() {
             setComposeOpen(false);
             showToast("Draft saved.");
           }}
+          onDeleteDraft={() => deleteDraft(draft)}
         />
 
         {toastEl}
@@ -512,6 +664,13 @@ export function VibeMailApp() {
             emptyHint={filter === "all" ? "New mail will appear here in real time." : null}
             onRefresh={onRefresh}
             onCollapse={collapseList}
+            selectedIds={selectedIds}
+            onToggleSelect={toggleSelect}
+            selectionActive={selectionActive}
+            bulkBar={bulkBar}
+            labelOptions={labels}
+            onAddLabel={addLabelToMessage}
+            onRemoveLabel={removeLabelFromMessage}
           />
         )}
 
@@ -533,6 +692,8 @@ export function VibeMailApp() {
             onMarkUnread={markUnreadAndClose}
             onArchive={archiveSelected}
             onTrash={trashSelected}
+            onRestore={restoreSelected}
+            onDeleteForever={deleteForeverSelected}
             onEditDraft={() => {
               setReplyTo(null);
               setDraft(selected);
@@ -576,6 +737,7 @@ export function VibeMailApp() {
             setComposeOpen(false);
             showToast("Draft saved.");
           }}
+          onDeleteDraft={() => deleteDraft(draft)}
         />
 
         {toastEl}

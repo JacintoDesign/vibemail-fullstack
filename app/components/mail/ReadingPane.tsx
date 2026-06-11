@@ -16,6 +16,8 @@ export interface ReadingPaneProps {
   onMarkUnread: () => void;
   onArchive: () => void;
   onTrash: () => void;
+  onRestore: () => void;
+  onDeleteForever: () => void;
   onEditDraft: () => void;
   onPopOut: () => void;
   onCollapse: () => void;
@@ -121,6 +123,8 @@ function ThreadReader({
   onMarkUnread,
   onArchive,
   onTrash,
+  onRestore,
+  onDeleteForever,
   onEditDraft,
   onPopOut,
   onCollapse,
@@ -143,6 +147,8 @@ function ThreadReader({
     });
 
   const isDraft = message.status === "draft";
+  const inTrash = message.status === "trash";
+  const inArchive = message.status === "archived";
 
   const cards = thread.map((m, i) => (
     <MessageCard key={i} msg={m} expanded={openSet.has(i)} onToggle={() => toggleMsg(i)} />
@@ -169,16 +175,30 @@ function ThreadReader({
 
   // ── Mobile: single-panel thread view with a back-to-inbox header ──────────
   if (mobile) {
+    const mobileBtn = { width: 32, height: 32 };
     const mobileActions = isDraft ? (
       <Button variant="primary" icon="compose" size="sm" onClick={onEditDraft}>
         Edit draft
       </Button>
+    ) : inTrash ? (
+      <>
+        <IconButton icon="inbox" variant="ghost" label="Restore to Inbox" onClick={onRestore} style={mobileBtn} />
+        <IconButton icon="star" label="Star" active={message.isStarred} onClick={onToggleStar} style={mobileBtn} />
+        <IconButton icon="trash" variant="ghost" label="Delete forever" onClick={onDeleteForever} style={mobileBtn} />
+      </>
+    ) : inArchive ? (
+      <>
+        <IconButton icon="inbox" variant="ghost" label="Move to Inbox" onClick={onRestore} style={mobileBtn} />
+        <IconButton icon="mail" variant="ghost" label="Mark unread" onClick={onMarkUnread} style={mobileBtn} />
+        <IconButton icon="star" label="Star" active={message.isStarred} onClick={onToggleStar} style={mobileBtn} />
+        <IconButton icon="trash" variant="ghost" label="Delete" onClick={onTrash} style={mobileBtn} />
+      </>
     ) : (
       <>
-        <IconButton icon="mail" variant="ghost" label="Mark unread" onClick={onMarkUnread} style={{ width: 32, height: 32 }} />
-        <IconButton icon="star" label="Star" active={message.isStarred} onClick={onToggleStar} style={{ width: 32, height: 32 }} />
-        <IconButton icon="archive" variant="ghost" label="Archive" onClick={onArchive} style={{ width: 32, height: 32 }} />
-        <IconButton icon="trash" variant="ghost" label="Delete" onClick={onTrash} style={{ width: 32, height: 32 }} />
+        <IconButton icon="mail" variant="ghost" label="Mark unread" onClick={onMarkUnread} style={mobileBtn} />
+        <IconButton icon="star" label="Star" active={message.isStarred} onClick={onToggleStar} style={mobileBtn} />
+        <IconButton icon="archive" variant="ghost" label="Archive" onClick={onArchive} style={mobileBtn} />
+        <IconButton icon="trash" variant="ghost" label="Delete" onClick={onTrash} style={mobileBtn} />
       </>
     );
     return (
@@ -242,6 +262,21 @@ function ThreadReader({
     <Button variant="primary" icon="compose" size="sm" onClick={onEditDraft}>
       Edit draft
     </Button>
+  ) : inTrash ? (
+    <>
+      <IconButton icon="inbox" variant="ghost" label="Restore to Inbox" onClick={onRestore} />
+      <IconButton icon="star" label="Star" active={message.isStarred} onClick={onToggleStar} />
+      <IconButton icon="trash" variant="ghost" label="Delete forever" onClick={onDeleteForever} />
+      <ChromeBtn icon="popOut" label="Pop out thread" onClick={onPopOut} />
+    </>
+  ) : inArchive ? (
+    <>
+      <IconButton icon="inbox" variant="ghost" label="Move to Inbox" onClick={onRestore} />
+      <IconButton icon="mail" variant="ghost" label="Mark unread" onClick={onMarkUnread} />
+      <IconButton icon="star" label="Star" active={message.isStarred} onClick={onToggleStar} />
+      <IconButton icon="trash" variant="ghost" label="Delete" onClick={onTrash} />
+      <ChromeBtn icon="popOut" label="Pop out thread" onClick={onPopOut} />
+    </>
   ) : (
     <>
       <IconButton icon="mail" variant="ghost" label="Mark unread" onClick={onMarkUnread} />

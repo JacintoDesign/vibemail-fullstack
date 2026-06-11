@@ -3,7 +3,7 @@
 // Middle column: folder header + read-toggle + search + cards + states.
 // Ported from MessageList.jsx. The inbox/search card is the shared MessageRow.
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { Banner, Button, Icon, IconButton, Input, Skeleton } from "@/components/ds";
 import type { IconName } from "@/components/ds";
 import type { Message } from "@/lib/types";
@@ -41,6 +41,18 @@ export interface MessageListProps {
   mobile?: boolean;
   onMenu?: () => void;
   onCompose?: () => void;
+  /** Multiselect: the set of currently-selected message ids. */
+  selectedIds?: Set<string>;
+  /** Multiselect: toggle one message's selection. Presence enables row checkboxes. */
+  onToggleSelect?: (id: string) => void;
+  /** Multiselect: a selection exists, so pin all checkboxes visible. */
+  selectionActive?: boolean;
+  /** The contextual bulk-action bar, rendered below the search bar when a selection is active. */
+  bulkBar?: ReactNode;
+  /** Labels offered by each row's "+" label picker. Presence enables the picker. */
+  labelOptions?: string[];
+  onAddLabel?: (id: string, label: string) => void;
+  onRemoveLabel?: (id: string, label: string) => void;
 }
 
 function ReadToggle({ value, onChange }: { value: ReadFilter; onChange: (v: ReadFilter) => void }) {
@@ -200,6 +212,13 @@ export function MessageList({
   mobile,
   onMenu,
   onCompose,
+  selectedIds,
+  onToggleSelect,
+  selectionActive,
+  bulkBar,
+  labelOptions,
+  onAddLabel,
+  onRemoveLabel,
 }: MessageListProps) {
   const [visibleCount, setVisibleCount] = useState(VM_PAGE_SIZE);
 
@@ -311,6 +330,9 @@ export function MessageList({
         </div>
       </div>
 
+      {/* Contextual bulk-action bar (only present while a selection is active) */}
+      {bulkBar}
+
       {/* Search summary line */}
       {searchMode ? (
         <div style={{ padding: "10px 10px 4px" }}>
@@ -376,6 +398,13 @@ export function MessageList({
                 onOpen={onOpen}
                 onToggleRead={() => onToggleRead(m)}
                 onToggleStar={() => onToggleStar(m)}
+                selectable={!mobile && !!onToggleSelect}
+                checked={selectedIds?.has(m.id)}
+                selectionActive={selectionActive}
+                onToggleSelect={() => onToggleSelect?.(m.id)}
+                availableLabels={mobile ? undefined : labelOptions}
+                onAddLabel={mobile ? undefined : (label) => onAddLabel?.(m.id, label)}
+                onRemoveLabel={mobile ? undefined : (label) => onRemoveLabel?.(m.id, label)}
               />
             ))}
             {hasMore && (

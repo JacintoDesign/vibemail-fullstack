@@ -28,6 +28,7 @@ export interface ComposeDrawerProps {
   onClose: () => void;
   onSend: (recipientCount: number) => void;
   onSaveDraft?: () => void;
+  onDeleteDraft?: () => void;
   mobile?: boolean;
 }
 
@@ -152,6 +153,7 @@ export function ComposeDrawer({
   onClose,
   onSend,
   onSaveDraft,
+  onDeleteDraft,
   mobile,
 }: ComposeDrawerProps) {
   const reply = !!replyTo;
@@ -471,6 +473,15 @@ export function ComposeDrawer({
                 Save draft
               </Button>
             </div>
+            {editingDraft ? (
+              <IconButton
+                icon="trash"
+                variant="ghost"
+                label="Delete draft"
+                onClick={() => onDeleteDraft?.()}
+                style={{ color: "var(--danger)" }}
+              />
+            ) : null}
           </div>
         ) : (
           <div
@@ -488,6 +499,17 @@ export function ComposeDrawer({
             <Button variant="secondary" disabled={sending} onClick={() => onSaveDraft?.()}>
               Save draft
             </Button>
+            {editingDraft ? (
+              <Button
+                variant="ghost"
+                icon="trash"
+                disabled={sending}
+                onClick={() => onDeleteDraft?.()}
+                style={{ color: "var(--danger)" }}
+              >
+                Delete draft
+              </Button>
+            ) : null}
             <div style={{ flex: 1 }} />
             <IconButton icon="paperclip" variant="ghost" label="Attach" />
           </div>
