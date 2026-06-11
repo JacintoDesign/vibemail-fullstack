@@ -3,15 +3,13 @@
 // Middle column: folder header + read-toggle + search + cards + states.
 // Ported from MessageList.jsx. The inbox/search card is the shared MessageRow.
 
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { Banner, Button, Icon, IconButton, Input, Skeleton } from "@/components/ds";
 import type { IconName } from "@/components/ds";
 import type { Message } from "@/lib/types";
 import { ChromeBtn } from "./PanelChrome";
 import { Hamburger } from "./Hamburger";
 import { MessageRow } from "./MessageRow";
-
-export const VM_PAGE_SIZE = 50;
 
 export type ReadFilter = "all" | "unread";
 
@@ -229,16 +227,10 @@ export function MessageList({
   onLoadMore,
   loadingMore,
 }: MessageListProps) {
-  const [visibleCount, setVisibleCount] = useState(VM_PAGE_SIZE);
-
-  // Reset pagination when the list changes (folder switch, search, refresh).
-  useEffect(() => {
-    setVisibleCount(VM_PAGE_SIZE);
-  }, [folderTitle, searchMode, query]);
-
-  const visibleMessages = messages.slice(0, visibleCount);
-  const canExpandClient = messages.length > visibleCount;
-  const showLoadMore = canExpandClient || !!serverHasMore;
+  // Pagination is server-side (cursor-based, one page per fetch). Render every
+  // loaded message; "Load more" pulls the next server page and appends it.
+  const visibleMessages = messages;
+  const showLoadMore = !!serverHasMore;
 
   const containerStyle: CSSProperties = {
     width: fill ? "auto" : "var(--list-w)",
@@ -427,12 +419,7 @@ export function MessageList({
                   variant="secondary"
                   icon="chevronDown"
                   disabled={loadingMore}
-                  onClick={() => {
-                    // Reveal more of what's already loaded first; only hit the
-                    // server (next cursor page) once the client slice is spent.
-                    if (canExpandClient) setVisibleCount((c) => c + VM_PAGE_SIZE);
-                    else onLoadMore?.();
-                  }}
+                  onClick={() => onLoadMore?.()}
                 >
                   {loadingMore ? "Loading…" : "Load more"}
                 </Button>
