@@ -11,7 +11,7 @@ import { ChromeBtn } from "./PanelChrome";
 import { Hamburger } from "./Hamburger";
 import { MessageRow } from "./MessageRow";
 
-export const VM_PAGE_SIZE = 8;
+export const VM_PAGE_SIZE = 50;
 
 export type ReadFilter = "all" | "unread";
 

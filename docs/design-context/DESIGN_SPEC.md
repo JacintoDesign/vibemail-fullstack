@@ -110,7 +110,7 @@ a compose icon button.
 The **search bar** is a full-width input with a search icon; it gains an accent
 glow border when search mode is active.
 
-Rows are paginated at **8 per page** with a **Load more** button; the page
+Rows are paginated at **50 per page** with a **Load more** button; the page
 resets on folder switch, search, or query change.
 
 ### Message Row
