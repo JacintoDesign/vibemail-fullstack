@@ -31,6 +31,7 @@ const quickReplyStyle = {
   alignItems: "center",
   gap: 10,
   marginTop: 2,
+  flexShrink: 0,
   padding: "12px 16px",
   width: "100%",
   textAlign: "left",
@@ -183,7 +184,7 @@ function ThreadReader({
   };
 
   const cards = thread.map((m, i) => (
-    <MessageCard key={i} msg={m} expanded={openSet.has(i)} onToggle={() => toggleMsg(i)} />
+    <MessageCard key={i} msg={m} expanded={openSet.has(i)} onToggle={() => toggleMsg(i)} fill />
   ));
 
   const quickReply = !isDraft ? (

@@ -11,14 +11,31 @@ export function MessageCard({
   msg,
   expanded,
   onToggle,
+  fill,
 }: {
   msg: ThreadMsg;
   expanded: boolean;
   onToggle: () => void;
+  /** When the body is HTML-only, let the expanded card grow to fill the
+   *  available reading-pane height (the iframe stretches) instead of being
+   *  capped at a short fixed min-height. */
+  fill?: boolean;
 }) {
+  // The HTML iframe is only rendered when there's no plain-text body — match
+  // that condition so a text card never tries to flex-fill.
+  const htmlOnly = !msg.body && !!msg.bodyHtml;
+  const fillActive = !!fill && expanded && htmlOnly;
   return (
     <MotionConfig reducedMotion="user">
-    <GlassPanel tier={expanded ? 1 : 0} radius="md" style={{ overflow: "hidden", flexShrink: 0 }}>
+    <GlassPanel
+      tier={expanded ? 1 : 0}
+      radius="md"
+      style={
+        fillActive
+          ? { overflow: "hidden", flex: "1 1 0", minHeight: 0, display: "flex", flexDirection: "column" }
+          : { overflow: "hidden", flexShrink: 0 }
+      }
+    >
       <div
         className="vm-msg-head"
         onClick={onToggle}
@@ -132,13 +149,20 @@ export function MessageCard({
         {expanded ? (
           <motion.div
             key="body"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
+            // A fill card flexes to a definite height, so animate opacity only —
+            // a height tween would fight `flex: 1`. A normal card animates its
+            // height open/closed as before.
+            initial={fillActive ? { opacity: 0 } : { height: 0, opacity: 0 }}
+            animate={fillActive ? { opacity: 1 } : { height: "auto", opacity: 1 }}
+            exit={fillActive ? { opacity: 0 } : { height: 0, opacity: 0 }}
             transition={{ duration: 0.25, ease: [0.2, 0.85, 0.3, 1] }}
-            style={{ overflow: "hidden" }}
+            style={
+              fillActive
+                ? { overflow: "hidden", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }
+                : { overflow: "hidden" }
+            }
           >
-            <ExpandedBody msg={msg} />
+            <ExpandedBody msg={msg} fill={fillActive} />
           </motion.div>
         ) : null}
       </AnimatePresence>
@@ -151,21 +175,30 @@ export function MessageCard({
 // reported `bodyPlain: null`) but an HTML body exists, render that HTML inside a
 // sandboxed iframe — `sandbox` with no `allow-*` tokens blocks scripts, forms,
 // popups, and same-origin access, so remote markup can't touch the app.
-function ExpandedBody({ msg }: { msg: ThreadMsg }) {
+function ExpandedBody({ msg, fill }: { msg: ThreadMsg; fill?: boolean }) {
   if (!msg.body && msg.bodyHtml) {
     return (
-      <div className="vm-msg-body" style={{ padding: "16px" }}>
+      <div
+        className="vm-msg-body"
+        style={
+          fill
+            ? { padding: "16px", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }
+            : { padding: "16px" }
+        }
+      >
         <iframe
           title="Email body"
           sandbox=""
           srcDoc={msg.bodyHtml}
           style={{
             width: "100%",
-            minHeight: 240,
             border: "none",
             borderRadius: "var(--radius-sm)",
             background: "var(--surface-input, #fff)",
             colorScheme: "light",
+            // Fill: stretch to the card's remaining height (iframe scrolls
+            // internally). Otherwise keep the short fixed floor.
+            ...(fill ? { flex: 1, minHeight: 0 } : { minHeight: 240 }),
           }}
         />
       </div>
