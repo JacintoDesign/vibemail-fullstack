@@ -6,6 +6,7 @@
 
 import { useState, type MouseEvent } from "react";
 import { motion } from "motion/react";
+import { decodeEntities } from "@/lib/text";
 import { Badge, Icon } from "@/components/ds";
 import type { Message } from "@/lib/types";
 import { useSettings } from "@/providers/SettingsProvider";
@@ -259,7 +260,7 @@ export function MessageRow({
             color: "var(--text-faint)",
           }}
         >
-          {m.snippet}
+          {decodeEntities(m.snippet ?? "")}
         </div>
       ) : null}
 

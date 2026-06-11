@@ -4,6 +4,7 @@
 // ComposeDrawer quoted-thread view. Ported from VMMessageCard in ReadingPane.jsx.
 
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
+import { decodeEntities } from "@/lib/text";
 import { GlassPanel, Icon } from "@/components/ds";
 import type { ThreadMsg } from "@/lib/types";
 
@@ -100,7 +101,7 @@ export function MessageCard({
                 marginTop: 4,
               }}
             >
-              {msg.body || (msg.bodyHtml ? "HTML message — open to view" : "")}
+              {decodeEntities(msg.body || (msg.bodyHtml ? "HTML message — open to view" : ""))}
             </div>
           ) : null}
         </div>
@@ -216,7 +217,7 @@ function ExpandedBody({ msg, fill }: { msg: ThreadMsg; fill?: boolean }) {
         whiteSpace: "pre-wrap",
       }}
     >
-      {msg.body}
+      {decodeEntities(msg.body ?? "")}
     </div>
   );
 }
