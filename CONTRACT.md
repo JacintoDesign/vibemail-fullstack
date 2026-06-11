@@ -86,7 +86,11 @@ The `messages` Supabase table stores one row per Gmail message per user. The Typ
 ```typescript
 interface Message {
   // ── Supabase-managed ──────────────────────────────────────────────────────
-  id:         string;        // TEXT PRIMARY KEY — set to gmailId at insert
+  id:         string;        // PRIMARY KEY — server-generated UUID (gen_random_uuid()).
+                             //   Opaque row identifier. NOT equal to gmailId.
+                             //   Use it as a stable client-side key only; it is NOT
+                             //   the value the action endpoints accept in their path
+                             //   (those key on gmailId — see the §4 path-id note).
   userId:     string;        // UUID NOT NULL REFERENCES users(id)
                              //   source: JWT `sub` claim on write
   createdAt:  string;        // TIMESTAMPTZ — Supabase default now()
@@ -95,6 +99,10 @@ interface Message {
   // ── Gmail message root ────────────────────────────────────────────────────
   gmailId:    string;        // TEXT NOT NULL
                              //   source: message.id
+                             //   This is the `:id` path param for PATCH /messages/:id
+                             //   and every /drafts/:id endpoint. A draft's gmailId is
+                             //   REASSIGNED by drafts.update / drafts.send — always use
+                             //   the gmailId from the latest response for follow-up calls.
   threadId:   string;        // TEXT NOT NULL
                              //   source: message.threadId
   labelIds:   string[];      // TEXT[] NOT NULL DEFAULT '{}'
@@ -163,6 +171,12 @@ All endpoints share:
 - **Base URL:** `/api/v1`
 - **Content-Type on all JSON responses:** `application/json`
 - **Auth:** `Authorization: Bearer <jwt>` required on every endpoint except the OAuth callback
+- **Path id (`:id`):** for `PATCH /messages/:id` and all `/drafts/:id*` endpoints, the `:id`
+  segment is the **Gmail message id** (the `gmailId` field — a hex string such as
+  `19eb1b4b228dec46`). It is **not** the Supabase row `id` (a server-generated UUID) and
+  **not** the `draftId`. Handlers resolve the row by its `gmail_id` column and pass the same
+  value to the Gmail API. `GET /threads/:threadId` uses the Gmail `threadId` (also from the
+  message, not the row UUID).
 - **Error envelope:** every non-2xx response returns exactly:
 
 ```typescript
@@ -321,7 +335,7 @@ Auth:         Authorization: Bearer <jwt>   required
 Content-Type: application/json
 
 Path parameters:
-  id   string   required   Gmail messageId (= messages.id in Supabase)
+  id   string   required   Gmail messageId (the `gmailId` field, a hex string — NOT the Supabase row `id` UUID)
 
 Body:
 {
@@ -515,7 +529,7 @@ Body:
 
 ### 4.9 Draft Update — `PATCH /api/v1/drafts/:id`
 
-Updates the content of an existing Gmail draft. `:id` is the Supabase `messages.id` (= Gmail message ID, not the `draftId`). The handler reads `draftId` from Supabase to call the Gmail drafts API.
+Updates the content of an existing Gmail draft. `:id` is the Gmail message id (the `gmailId` field — not the Supabase row `id` UUID, and not the `draftId`). The handler resolves the row by `gmail_id` and reads the stored `draftId` to call the Gmail drafts API. Note: `drafts.update` assigns a **new** Gmail message id, so the response carries the updated `gmailId` — subsequent calls (draft send/delete) must use that new value.
 
 #### Request
 
@@ -526,7 +540,7 @@ Auth:         Authorization: Bearer <jwt>   required
 Content-Type: application/json
 
 Path parameters:
-  id   string   required   messages.id in Supabase (= Gmail messageId of the draft)
+  id   string   required   Gmail messageId of the draft (the `gmailId` field — NOT the Supabase row `id` UUID, and NOT the draftId)
 
 Body (all optional, at least one required):
 {
@@ -559,7 +573,7 @@ Body (all optional, at least one required):
 
 ### 4.10 Draft Delete — `DELETE /api/v1/drafts/:id`
 
-Deletes the Gmail draft and removes the Supabase row. Both operations must succeed — if the Gmail delete succeeds but the Supabase delete fails, the error is surfaced and the Supabase row is left for retry. `:id` is the Supabase `messages.id`.
+Deletes the Gmail draft and removes the Supabase row. Both operations must succeed — if the Gmail delete succeeds but the Supabase delete fails, the error is surfaced and the Supabase row is left for retry. `:id` is the Gmail message id (the `gmailId` field — not the Supabase row `id` UUID).
 
 #### Request
 
@@ -569,7 +583,7 @@ Path:    /api/v1/drafts/:id
 Auth:    Authorization: Bearer <jwt>   required
 
 Path parameters:
-  id   string   required   messages.id in Supabase (= Gmail messageId of the draft)
+  id   string   required   Gmail messageId of the draft (the `gmailId` field — NOT the Supabase row `id` UUID, and NOT the draftId)
 ```
 
 #### Response — 204 No Content
@@ -591,7 +605,7 @@ No body.
 
 ### 4.11 Draft Send — `POST /api/v1/drafts/:id/send`
 
-Sends an existing Gmail draft via `drafts.send` and transitions the Supabase row: clears `draftId`, updates `gmailId` to the new sent message ID, and sets `status = 'sent'`. `:id` is the Supabase `messages.id` (= Gmail messageId of the draft).
+Sends an existing Gmail draft via `drafts.send` and transitions the Supabase row: clears `draftId`, updates `gmailId` to the new sent message ID, and sets `status = 'sent'`. `:id` is the Gmail message id (the `gmailId` field — not the Supabase row `id` UUID).
 
 #### Request
 
@@ -601,7 +615,7 @@ Path:    /api/v1/drafts/:id/send
 Auth:    Authorization: Bearer <jwt>   required
 
 Path parameters:
-  id   string   required   messages.id in Supabase (= Gmail messageId of the draft)
+  id   string   required   Gmail messageId of the draft (the `gmailId` field — NOT the Supabase row `id` UUID, and NOT the draftId)
 
 Body: none required
 ```
@@ -625,4 +639,4 @@ Body: none required
 
 ---
 
-*Last updated: 2026-06-04*
+*Last updated: 2026-06-11*
