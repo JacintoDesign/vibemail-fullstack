@@ -269,7 +269,7 @@ export function MessageList({
           size="sm"
           label="Refresh"
           onClick={onRefresh}
-          style={refreshing ? { animation: "vmSpin 0.8s linear infinite" } : undefined}
+          spinning={refreshing}
         />
         {mobile ? (
           <IconButton

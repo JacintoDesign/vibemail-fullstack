@@ -132,7 +132,7 @@ function QuotedThread({ replyTo }: { replyTo: Message }) {
           display: "flex",
           flexDirection: "column",
           gap: 8,
-          maxHeight: 260,
+          maxHeight: "calc(260px + 10vh)",
           overflowY: "auto",
         }}
       >

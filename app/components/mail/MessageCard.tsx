@@ -16,7 +16,7 @@ export function MessageCard({
   onToggle: () => void;
 }) {
   return (
-    <GlassPanel tier={expanded ? 1 : 0} radius="md" style={{ overflow: "hidden" }}>
+    <GlassPanel tier={expanded ? 1 : 0} radius="md" style={{ overflow: "hidden", flexShrink: 0 }}>
       <div
         className="vm-msg-head"
         onClick={onToggle}
@@ -136,8 +136,6 @@ export function MessageCard({
             lineHeight: "var(--lh-body)",
             color: "var(--text-body-ink)",
             whiteSpace: "pre-wrap",
-            maxHeight: 300,
-            overflowY: "auto",
           }}
         >
           {msg.body}

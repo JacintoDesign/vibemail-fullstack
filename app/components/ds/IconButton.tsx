@@ -9,6 +9,7 @@ export interface IconButtonProps {
   variant?: "ghost";
   size?: "sm" | "md";
   active?: boolean;
+  spinning?: boolean;
   onClick?: () => void;
   style?: CSSProperties;
 }
@@ -18,6 +19,7 @@ export function IconButton({
   label,
   size = "md",
   active = false,
+  spinning = false,
   onClick,
   style,
 }: IconButtonProps) {
@@ -58,11 +60,13 @@ export function IconButton({
         ...style,
       }}
     >
-      <Icon
-        name={icon}
-        size={iconSize}
-        fill={active && icon === "star" ? "currentColor" : "none"}
-      />
+      <span style={{ display: "flex", animation: spinning ? "vmSpin 0.8s linear infinite" : undefined }}>
+        <Icon
+          name={icon}
+          size={iconSize}
+          fill={active && icon === "star" ? "currentColor" : "none"}
+        />
+      </span>
     </button>
   );
 }

@@ -240,9 +240,9 @@ function SettingsPanel({
     if (!anchorRef.current) return;
     const r = anchorRef.current.getBoundingClientRect();
     setPos({
-      bottom: window.innerHeight - r.top + 8,
+      bottom: window.innerHeight - r.top + 12,
       left: Math.max(8, r.left),
-      width: Math.max(210, r.width),
+      width: r.width,
     });
   }, [anchorRef]);
 
@@ -431,7 +431,7 @@ export function Sidebar({
     display: "flex",
     flexDirection: "column",
     gap: mobile ? 12 : 16,
-    padding: rail ? "13px 6px 20px" : mobile ? "14px 14px 24px" : "18px 12px 20px",
+    padding: rail ? "18px 6px 20px" : mobile ? "14px 14px 24px" : "23px 12px 20px",
     overflowY: mobile ? "auto" : "visible",
     WebkitOverflowScrolling: "touch",
     background: mobile ? "var(--navy)" : "var(--glass-1)",

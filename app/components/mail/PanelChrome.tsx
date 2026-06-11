@@ -150,7 +150,7 @@ export function CollapsedRail({
         flexDirection: "column",
         alignItems: "center",
         gap: 12,
-        padding: "16px 0",
+        padding: "18px 0 16px",
         background: "var(--glass-0)",
         borderRight: side === "left" ? "1px solid var(--border-hairline)" : "none",
         borderLeft: side === "right" ? "1px solid var(--border-hairline)" : "none",

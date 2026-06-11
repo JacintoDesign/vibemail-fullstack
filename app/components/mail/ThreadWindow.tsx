@@ -183,11 +183,21 @@ export function ThreadWindow({
         {thread.map((m, i) => (
           <MessageCard key={i} msg={m} expanded={openSet.has(i)} onToggle={() => toggleMsg(i)} />
         ))}
-        <div style={{ display: "flex", gap: 10, marginTop: 2 }}>
-          <Button variant="secondary" icon="reply" size="sm" onClick={onReply}>
-            Reply
-          </Button>
-        </div>
+      </div>
+
+      {/* Reply footer — pinned, always visible */}
+      <div
+        style={{
+          flexShrink: 0,
+          display: "flex",
+          gap: 10,
+          padding: "10px 14px",
+          borderTop: "1px solid var(--border-hairline)",
+        }}
+      >
+        <Button variant="secondary" icon="reply" size="sm" onClick={onReply}>
+          Reply
+        </Button>
       </div>
 
       {/* Resize grip */}

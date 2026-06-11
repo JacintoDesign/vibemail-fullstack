@@ -34,7 +34,7 @@ const VM_EMPTY_TEXT: Record<string, string> = {
 };
 
 const VM_LAYOUT_DEFAULTS = {
-  sidebarW: 224,
+  sidebarW: 240,
   sidebarRail: false,
   listW: 450,
   listCollapsed: false,
@@ -94,7 +94,7 @@ export function VibeMailApp() {
     const rect = rootRef.current.getBoundingClientRect();
     const w = clientX - rect.left;
     if (w < 140) patchLayout({ sidebarRail: true });
-    else patchLayout({ sidebarRail: false, sidebarW: Math.min(Math.max(w, 180), 320) });
+    else patchLayout({ sidebarRail: false, sidebarW: Math.min(Math.max(w, 216), 320) });
   };
   const resizeList = (clientX: number) => {
     if (!rootRef.current) return;
