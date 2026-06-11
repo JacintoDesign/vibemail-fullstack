@@ -5,17 +5,28 @@
 // sign-in. Phase 2 points the button at the real /api/v1/auth/google start.
 
 import { useEffect, useState } from "react";
+import { Banner } from "@/components/ds";
 import { ThemeToggle } from "@/components/mail/ThemeToggle";
+import { takeSignOutReason } from "@/lib/auth";
 import { useSettings } from "@/providers/SettingsProvider";
 
 export function AuthSplash({ onSignIn }: { onSignIn: () => void }) {
   const { theme, toggleTheme } = useSettings();
   const [ready, setReady] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     const id = setTimeout(() => setReady(true), 1250);
     return () => clearTimeout(id);
+  }, []);
+
+  // Surface why the user landed back on the sign-in screen (e.g. a 401 cleared
+  // their token). Read once so a manual refresh doesn't keep showing it.
+  useEffect(() => {
+    if (takeSignOutReason() === "expired") {
+      setNotice("Your session expired. Please sign in again.");
+    }
   }, []);
 
   const handleSignIn = () => {
@@ -31,6 +42,12 @@ export function AuthSplash({ onSignIn }: { onSignIn: () => void }) {
       <div style={{ position: "absolute", top: 16, right: 16 }}>
         <ThemeToggle theme={theme} onToggle={toggleTheme} />
       </div>
+
+      {notice ? (
+        <div style={{ width: "min(420px, calc(100vw - 32px))" }}>
+          <Banner tone="error">{notice}</Banner>
+        </div>
+      ) : null}
 
       <div className="vm-splash-mark">
         <svg

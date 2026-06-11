@@ -4,6 +4,11 @@
 // SSR-safe (guard `window`).
 
 const TOKEN_KEY = "vm-token";
+// Survives the hard redirect in forceSignOut so the sign-in surface can explain
+// why the user landed back there (read once, then cleared).
+const SIGNOUT_REASON_KEY = "vm-signout-reason";
+
+export type SignOutReason = "expired";
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -56,8 +61,31 @@ export function getAccountEmail(): string {
   return typeof payload?.email === "string" ? payload.email : "";
 }
 
-/** Clear the token and bounce to the sign-in surface (used on 401/expiry). */
-export function forceSignOut(): void {
+/**
+ * Clear the token and bounce to the sign-in surface. Shared by both explicit
+ * sign-out and automatic 401/expiry handling. An optional `reason` is stashed
+ * for one read so the sign-in surface can show a message (e.g. "session expired").
+ */
+export function forceSignOut(reason?: SignOutReason): void {
   clearToken();
-  if (typeof window !== "undefined") window.location.href = "/";
+  if (typeof window === "undefined") return;
+  try {
+    if (reason) window.sessionStorage.setItem(SIGNOUT_REASON_KEY, reason);
+    else window.sessionStorage.removeItem(SIGNOUT_REASON_KEY);
+  } catch {
+    /* storage unavailable — proceed without a message */
+  }
+  window.location.href = "/";
+}
+
+/** Read and clear the one-shot sign-out reason set before a redirect. */
+export function takeSignOutReason(): SignOutReason | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const reason = window.sessionStorage.getItem(SIGNOUT_REASON_KEY);
+    if (reason) window.sessionStorage.removeItem(SIGNOUT_REASON_KEY);
+    return reason === "expired" ? "expired" : null;
+  } catch {
+    return null;
+  }
 }

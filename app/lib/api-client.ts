@@ -54,8 +54,8 @@ async function parseResponse<T>(res: Response): Promise<T> {
       error: { code: "UNKNOWN", message: res.statusText },
     }) as ApiErrorEnvelope;
     // An expired or invalid JWT is unrecoverable in-app — drop the token and
-    // bounce back to the sign-in surface (which restarts the OAuth flow).
-    if (res.status === 401) forceSignOut();
+    // bounce back to the sign-in surface with a "session expired" message.
+    if (res.status === 401) forceSignOut("expired");
     throw new ApiError(res.status, envelope);
   }
 

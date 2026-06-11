@@ -13,7 +13,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { clearToken, getToken, setToken } from "@/lib/auth";
+import { forceSignOut, getToken, setToken } from "@/lib/auth";
 
 interface AuthContextValue {
   /** False until the initial token read completes (avoids a flash). */
@@ -41,9 +41,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthed(true);
   }, []);
 
+  // Explicit sign-out reuses the same clear-token-and-redirect path as 401
+  // handling (no reason → no "session expired" message on the sign-in surface).
   const signOut = useCallback(() => {
-    clearToken();
-    setAuthed(false);
+    forceSignOut();
   }, []);
 
   const value = useMemo<AuthContextValue>(
