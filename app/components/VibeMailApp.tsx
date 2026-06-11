@@ -234,6 +234,50 @@ export function VibeMailApp() {
     }
   }, [nextCursor, loadingMore, searchMode, query, filter]);
 
+  // ── Live inbox: poll for newly-inserted messages ──────────────────────────
+  // There is no browser Supabase client (the only client is server-side and
+  // service-role), so rather than a realtime subscription we poll the current
+  // folder on an interval and merge in rows we haven't seen yet. New messages
+  // surface without a manual refresh. We only ADD unseen ids and never
+  // overwrite existing rows, so optimistic local changes (read/star/archive)
+  // are preserved. Skipped during search so live results aren't disturbed.
+  useEffect(() => {
+    if (searchMode) return;
+    const POLL_INTERVAL_MS = 20_000;
+    let cancelled = false;
+    let inFlight = false;
+
+    const poll = async () => {
+      if (cancelled || inFlight || document.visibilityState === "hidden") return;
+      inFlight = true;
+      try {
+        const page = await fetchFolder(filter);
+        if (cancelled) return; // folder switched while in flight — drop this result
+        setMessages((ms) => {
+          const seen = new Set(ms.map((m) => m.id));
+          const fresh = page.messages.filter((m) => !seen.has(m.id));
+          return fresh.length ? [...fresh, ...ms] : ms;
+        });
+      } catch {
+        /* transient (offline / token refresh) — just try again next tick */
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    const id = setInterval(poll, POLL_INTERVAL_MS);
+    // Catch up immediately when the tab regains focus after being backgrounded.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") poll();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [filter, searchMode]);
+
   // Global keyboard shortcuts live in a single handler defined further down,
   // once every action it dispatches to is in scope (see the keydown effect
   // after the message actions). A ref carries the g-prefix ("go to") pending
