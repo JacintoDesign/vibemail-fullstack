@@ -184,7 +184,7 @@ function ThreadReader({
   };
 
   const cards = thread.map((m, i) => (
-    <MessageCard key={i} msg={m} expanded={openSet.has(i)} onToggle={() => toggleMsg(i)} fill />
+    <MessageCard key={i} msg={m} expanded={openSet.has(i)} onToggle={() => toggleMsg(i)} fill bodyToggle />
   ));
 
   const quickReply = !isDraft ? (

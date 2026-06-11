@@ -3,6 +3,7 @@
 // Collapsible thread message card. Shared by ReadingPane, ThreadWindow, and the
 // ComposeDrawer quoted-thread view. Ported from VMMessageCard in ReadingPane.jsx.
 
+import { useState, type CSSProperties } from "react";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { decodeEntities } from "@/lib/text";
 import { GlassPanel, Icon } from "@/components/ds";
@@ -13,6 +14,7 @@ export function MessageCard({
   expanded,
   onToggle,
   fill,
+  bodyToggle,
 }: {
   msg: ThreadMsg;
   expanded: boolean;
@@ -21,11 +23,22 @@ export function MessageCard({
    *  available reading-pane height (the iframe stretches) instead of being
    *  capped at a short fixed min-height. */
   fill?: boolean;
+  /** Show the per-message Plain/HTML view toggle in the card header. Opt-in so
+   *  the compose quoted-thread view stays toggle-free. */
+  bodyToggle?: boolean;
 }) {
-  // The HTML iframe is only rendered when there's no plain-text body — match
-  // that condition so a text card never tries to flex-fill.
-  const htmlOnly = !msg.body && !!msg.bodyHtml;
-  const fillActive = !!fill && expanded && htmlOnly;
+  const hasPlain = !!msg.body;
+  const hasHtml = !!msg.bodyHtml;
+  // Per-message view mode. Default to the plain body; fall back to HTML only
+  // when there is no plain text. This state lives on the card instance, so it
+  // resets to the default whenever the thread reader remounts (new thread).
+  const [mode, setMode] = useState<"plain" | "html">(hasPlain ? "plain" : "html");
+  // Clamp the chosen mode to what actually exists, so a disabled option can
+  // never end up rendered.
+  const view: "plain" | "html" =
+    mode === "html" && hasHtml ? "html" : hasPlain ? "plain" : hasHtml ? "html" : "plain";
+  // The HTML iframe only flex-fills when it's the body actually on screen.
+  const fillActive = !!fill && expanded && view === "html";
   return (
     <MotionConfig reducedMotion="user">
     <GlassPanel
@@ -105,6 +118,9 @@ export function MessageCard({
             </div>
           ) : null}
         </div>
+        {expanded && bodyToggle ? (
+          <BodyToggle view={view} hasPlain={hasPlain} hasHtml={hasHtml} onSelect={setMode} />
+        ) : null}
         <span
           className="vm-msg-date-inline"
           style={{
@@ -163,7 +179,7 @@ export function MessageCard({
                 : { overflow: "hidden" }
             }
           >
-            <ExpandedBody msg={msg} fill={fillActive} />
+            <ExpandedBody msg={msg} view={view} fill={fillActive} />
           </motion.div>
         ) : null}
       </AnimatePresence>
@@ -172,12 +188,84 @@ export function MessageCard({
   );
 }
 
-// The plain-text body is the primary rendering. When it is empty (the wire
-// reported `bodyPlain: null`) but an HTML body exists, render that HTML inside a
-// sandboxed iframe — `sandbox` with no `allow-*` tokens blocks scripts, forms,
-// popups, and same-origin access, so remote markup can't touch the app.
-function ExpandedBody({ msg, fill }: { msg: ThreadMsg; fill?: boolean }) {
-  if (!msg.body && msg.bodyHtml) {
+// Segmented Plain / HTML control shown in an expanded card's header. An option
+// is disabled when the message has no body of that format. Clicks stop
+// propagation so toggling the view never collapses the card.
+function BodyToggle({
+  view,
+  hasPlain,
+  hasHtml,
+  onSelect,
+}: {
+  view: "plain" | "html";
+  hasPlain: boolean;
+  hasHtml: boolean;
+  onSelect: (mode: "plain" | "html") => void;
+}) {
+  const seg = (active: boolean, disabled: boolean): CSSProperties => ({
+    appearance: "none",
+    border: "none",
+    background: active ? "var(--glass-2, var(--glass-1))" : "transparent",
+    color: disabled ? "var(--text-faint)" : active ? "var(--text-primary)" : "var(--text-muted)",
+    fontFamily: "var(--font-mono)",
+    fontSize: "var(--text-micro)",
+    fontWeight: active ? "var(--fw-bold)" : "var(--fw-regular)",
+    lineHeight: 1,
+    padding: "4px 8px",
+    cursor: disabled ? "default" : "pointer",
+    opacity: disabled ? 0.45 : 1,
+  });
+  return (
+    <div
+      role="group"
+      aria-label="Body format"
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        display: "inline-flex",
+        alignItems: "stretch",
+        flexShrink: 0,
+        border: "1px solid var(--border-default)",
+        borderRadius: "var(--radius-sm)",
+        overflow: "hidden",
+      }}
+    >
+      <button
+        type="button"
+        disabled={!hasPlain}
+        aria-pressed={view === "plain"}
+        title="Plain text"
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelect("plain");
+        }}
+        style={seg(view === "plain", !hasPlain)}
+      >
+        Plain
+      </button>
+      <span aria-hidden style={{ width: 1, alignSelf: "stretch", background: "var(--border-default)" }} />
+      <button
+        type="button"
+        disabled={!hasHtml}
+        aria-pressed={view === "html"}
+        title="Rendered HTML"
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelect("html");
+        }}
+        style={seg(view === "html", !hasHtml)}
+      >
+        HTML
+      </button>
+    </div>
+  );
+}
+
+// The plain-text body is the primary rendering. When the HTML view is selected
+// (or it's the only body available) render the HTML inside a sandboxed iframe —
+// `sandbox` with no `allow-*` tokens blocks scripts, forms, popups, and
+// same-origin access, so remote markup can't touch the app.
+function ExpandedBody({ msg, view, fill }: { msg: ThreadMsg; view: "plain" | "html"; fill?: boolean }) {
+  if (view === "html" && msg.bodyHtml) {
     return (
       <div
         className="vm-msg-body"
