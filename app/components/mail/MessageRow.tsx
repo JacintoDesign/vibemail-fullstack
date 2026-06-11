@@ -7,6 +7,7 @@
 import { useState, type MouseEvent } from "react";
 import { Badge, Icon } from "@/components/ds";
 import type { Message } from "@/lib/types";
+import { useSettings } from "@/providers/SettingsProvider";
 import { LabelPicker } from "./LabelPicker";
 
 export interface MessageRowProps {
@@ -65,6 +66,9 @@ export function MessageRow({
 }: MessageRowProps) {
   const [hover, setHover] = useState(false);
   const [labelMenuOpen, setLabelMenuOpen] = useState(false);
+  // The "compact" density is a stripped row: sender + subject only, no preview
+  // snippet and no label badges.
+  const minimal = useSettings().density === "compact";
   const unread = !m.isRead;
   const active = selected || checked;
   const showCheckbox = selectable && (checked || selectionActive || hover);
@@ -226,25 +230,28 @@ export function MessageRow({
         {m.subject}
       </div>
 
-      {/* Row 3 — preview */}
-      <div
-        style={{
-          display: "-webkit-box",
-          WebkitLineClamp: compact ? 1 : 2,
-          WebkitBoxOrient: "vertical",
-          overflow: "hidden",
-          fontFamily: "var(--font-mono)",
-          fontSize: "var(--text-row)",
-          lineHeight: 1.5,
-          color: "var(--text-faint)",
-        }}
-      >
-        {m.snippet}
-      </div>
+      {/* Row 3 — preview (hidden in the compact density) */}
+      {!minimal ? (
+        <div
+          style={{
+            display: "-webkit-box",
+            WebkitLineClamp: compact ? 1 : 2,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+            fontFamily: "var(--font-mono)",
+            fontSize: "var(--text-row)",
+            lineHeight: 1.5,
+            color: "var(--text-faint)",
+          }}
+        >
+          {m.snippet}
+        </div>
+      ) : null}
 
       {/* Row 4 — labels + hover "+" adder. Rendered when there are labels to
-          show, or (for label-less cards) only while hovering or the menu is open. */}
-      {!compact && (hasLabels || (canAddLabels && (hover || labelMenuOpen))) ? (
+          show, or (for label-less cards) only while hovering or the menu is open.
+          Hidden entirely in the compact density. */}
+      {!compact && !minimal && (hasLabels || (canAddLabels && (hover || labelMenuOpen))) ? (
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginTop: 1 }}>
           {(m.labels || []).map((l) => (
             <Badge

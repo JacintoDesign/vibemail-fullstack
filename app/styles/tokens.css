@@ -3,7 +3,7 @@
    :root overrides in `design-handoff/VibeMail Client.html`, the rules in
    docs/design-context, and how each token is used across the components.
 
-   First-paint defaults are dark · green · medium glass · compact density —
+   First-paint defaults are dark · green · medium glass · default density —
    the same values `lib/shell-vars.ts` re-derives and writes onto
    documentElement at runtime once the user's settings load. */
 
@@ -108,7 +108,7 @@
   --danger-hover: #d70015;
   --danger-soft: rgba(255, 69, 58, 0.12);
 
-  /* ── Density (compact default) ──────────────────────────────── */
+  /* ── Density (default — first paint; JS re-tokenises per setting) ──── */
   --row-h: 52px;
   --card-pad: 12px 14px;
   --card-gap: 7px;

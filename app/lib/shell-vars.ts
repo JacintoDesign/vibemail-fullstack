@@ -2,7 +2,7 @@
 // Re-derives accent ramp, glass level, blur, and density tokens from the
 // active settings and writes them onto documentElement so the whole shell
 // (and the splash/auth surface) re-tokens live. tokens.css holds matching
-// first-paint defaults (dark · green · medium · compact).
+// first-paint defaults (dark · green · medium · default density).
 
 import type { CSSVars } from "./types";
 
@@ -21,7 +21,7 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   theme: "dark",
-  density: "compact",
+  density: "default",
   glass: "medium",
   fontScale: 1,
   animatedBg: false,
@@ -67,9 +67,12 @@ const VM_GLASS: Record<GlassLevel, GlassLevelDef> = {
   high: { g0: 0.08, g1: 0.12, g2: 0.16, gh: 0.2, b0: "28px", b1: "40px", b2: "52px", b3: "58px" },
 };
 
-const VM_DENSITY: Record<Density, string> = { compact: "52px", default: "64px", comfy: "76px" };
-const VM_CARDPAD: Record<Density, string> = { compact: "12px 14px", default: "15px 16px", comfy: "18px 18px" };
-const VM_CARDGAP: Record<Density, string> = { compact: "7px", default: "9px", comfy: "12px" };
+// `compact` is the new ultra-dense row (sender + subject only — MessageRow drops
+// the snippet and label badges). `default`/`comfy` are the former compact/default
+// spacings shifted one notch denser.
+const VM_DENSITY: Record<Density, string> = { compact: "40px", default: "52px", comfy: "64px" };
+const VM_CARDPAD: Record<Density, string> = { compact: "7px 12px", default: "12px 14px", comfy: "15px 16px" };
+const VM_CARDGAP: Record<Density, string> = { compact: "4px", default: "7px", comfy: "9px" };
 
 function prefersReducedMotion(): boolean {
   return (
