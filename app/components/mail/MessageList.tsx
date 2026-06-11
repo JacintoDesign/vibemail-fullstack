@@ -281,7 +281,11 @@ export function MessageList({
             </span>
           ) : null}
         </h2>
-        {!searchMode && !mobile ? <ReadToggle value={readFilter} onChange={onReadFilter} /> : null}
+        {!mobile ? (
+          <div style={{ visibility: searchMode ? "hidden" : "visible" }}>
+            <ReadToggle value={readFilter} onChange={onReadFilter} />
+          </div>
+        ) : null}
         <IconButton
           icon="refresh"
           variant="ghost"
