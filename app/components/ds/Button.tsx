@@ -83,6 +83,7 @@ export function Button({
   return (
     <button
       type={type}
+      className="vm-tap"
       disabled={disabled}
       onClick={onClick}
       onMouseEnter={() => setHover(true)}

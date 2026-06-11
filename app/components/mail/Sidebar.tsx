@@ -78,6 +78,7 @@ export interface SidebarProps {
   width?: number;
   mobile?: boolean;
   onClose?: () => void;
+  onShowShortcuts?: () => void;
 }
 
 function NavItem({
@@ -217,6 +218,7 @@ function SettingsPanel({
   onGlassChange,
   animatedBg,
   onAnimatedBgChange,
+  onShowShortcuts,
   anchorRef,
   panelRef,
 }: Pick<
@@ -231,6 +233,7 @@ function SettingsPanel({
   | "onGlassChange"
   | "animatedBg"
   | "onAnimatedBgChange"
+  | "onShowShortcuts"
 > & {
   anchorRef: React.RefObject<HTMLButtonElement | null>;
   panelRef: React.RefObject<HTMLDivElement | null>;
@@ -381,6 +384,44 @@ function SettingsPanel({
         </button>
       </div>
 
+      {/* Keyboard shortcuts — desktop only */}
+      <div className="vm-desktop-only">
+        <button
+          type="button"
+          onClick={() => { onShowShortcuts?.(); }}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            width: "100%",
+            height: 32,
+            padding: "0 10px",
+            border: "1px solid var(--border-default)",
+            borderRadius: "var(--radius-sm)",
+            cursor: "pointer",
+            background: "transparent",
+            color: "var(--text-muted)",
+            fontFamily: "var(--font-mono)",
+            fontSize: "var(--text-row)",
+            transition: "background var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard)",
+          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "var(--glass-2)"; (e.currentTarget as HTMLButtonElement).style.color = "var(--text-primary)"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; (e.currentTarget as HTMLButtonElement).style.color = "var(--text-muted)"; }}
+        >
+          <kbd style={{
+            display: "inline-flex", alignItems: "center", justifyContent: "center",
+            width: 17, height: 17, flexShrink: 0,
+            fontFamily: "var(--font-mono)", fontSize: 11,
+            color: "var(--text-secondary)",
+            background: "var(--glass-2)",
+            border: "1px solid var(--border-default)",
+            borderRadius: "var(--radius-sm)",
+            lineHeight: 1,
+          }}>?</kbd>
+          <span>Keyboard shortcuts</span>
+        </button>
+      </div>
+
       {/* Sign out */}
       <div style={{ borderTop: "1px solid var(--border-hairline)", paddingTop: 11 }}>
         <button
@@ -437,6 +478,7 @@ export function Sidebar({
   width,
   mobile,
   onClose,
+  onShowShortcuts,
 }: SidebarProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const gearRef = useRef<HTMLButtonElement>(null);
@@ -524,6 +566,7 @@ export function Sidebar({
             {mobile && onClose ? (
               <button
                 type="button"
+                className="vm-tap"
                 aria-label="Close menu"
                 title="Close"
                 onClick={onClose}
@@ -633,6 +676,7 @@ export function Sidebar({
               onGlassChange={onGlassChange}
               animatedBg={animatedBg}
               onAnimatedBgChange={onAnimatedBgChange}
+              onShowShortcuts={onShowShortcuts}
               anchorRef={gearRef}
               panelRef={panelRef}
             />
@@ -640,6 +684,7 @@ export function Sidebar({
           <button
             ref={gearRef}
             type="button"
+            className="vm-tap"
             aria-label={settingsOpen ? "Close settings" : "Open settings"}
             title="Settings"
             onClick={() => setSettingsOpen((s) => !s)}

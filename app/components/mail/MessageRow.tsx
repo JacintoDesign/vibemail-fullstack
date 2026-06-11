@@ -77,9 +77,23 @@ export function MessageRow({
 
   return (
     <div
+      className="vm-row"
       role="button"
       tabIndex={0}
+      data-vm-row-id={m.id}
+      aria-label={`${m.senderName}: ${m.subject || "(no subject)"}`}
       onClick={() => onOpen(m)}
+      onKeyDown={(e) => {
+        // A div[role=button] does not natively activate on Enter/Space the way
+        // a real <button> does — wire it up so keyboard users can open the row.
+        // Guard on target===currentTarget so Space/Enter on an inner action
+        // button (star, select, mark-read) doesn't also open the message.
+        if (e.target !== e.currentTarget) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen(m);
+        }
+      }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
@@ -167,6 +181,7 @@ export function MessageRow({
         </div>
         <button
           type="button"
+          className="vm-tap vm-star-btn"
           aria-label={m.isStarred ? "Unstar" : "Star"}
           onClick={stop(onToggleStar)}
           style={{

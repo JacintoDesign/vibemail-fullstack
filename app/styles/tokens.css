@@ -120,7 +120,10 @@
 
 @media (max-width: 700px) {
   :root {
-    --vm-mobile-scale: 0.75;
+    /* Mobile keeps the full desktop type scale (no shrink): at 0.75 the row
+       preview/sender/timestamp fell to ~9–10.5px, below a legible minimum.
+       At 1.0 they land at 13px/14px/12px — the sizes the desktop audit passed. */
+    --vm-mobile-scale: 1;
   }
 }
 

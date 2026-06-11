@@ -36,6 +36,7 @@ export function IconButton({
   return (
     <button
       type="button"
+      className="vm-tap"
       aria-label={label}
       title={label}
       aria-pressed={active}

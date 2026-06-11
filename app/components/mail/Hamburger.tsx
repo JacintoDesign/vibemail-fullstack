@@ -15,6 +15,7 @@ export function Hamburger({
   return (
     <button
       type="button"
+      className="vm-tap"
       aria-label={expanded ? "Collapse panel" : "Expand panel"}
       title={expanded ? "Collapse panel" : "Expand panel"}
       onClick={onClick}

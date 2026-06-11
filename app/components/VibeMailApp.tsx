@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BulkActionBar, type BulkAction } from "@/components/mail/BulkActionBar";
 import { ComposeDrawer } from "@/components/mail/ComposeDrawer";
+import { KeyboardHelp } from "@/components/mail/KeyboardHelp";
 import { MessageList } from "@/components/mail/MessageList";
 import type { ReadFilter } from "@/components/mail/MessageList";
 import { CollapsedRail, Resizer } from "@/components/mail/PanelChrome";
@@ -144,6 +145,7 @@ export function VibeMailApp() {
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [draft, setDraft] = useState<Message | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   // Simulate a fetch on folder change.
   useEffect(() => {
@@ -152,21 +154,11 @@ export function VibeMailApp() {
     return () => clearTimeout(id);
   }, [filter]);
 
-  // cmd-k search, esc to exit.
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        setSearchMode(true);
-      }
-      if (e.key === "Escape" && searchMode) {
-        setSearchMode(false);
-        setQuery("");
-      }
-    };
-    window.addEventListener("keydown", h);
-    return () => window.removeEventListener("keydown", h);
-  }, [searchMode]);
+  // Global keyboard shortcuts live in a single handler defined further down,
+  // once every action it dispatches to is in scope (see the keydown effect
+  // after the message actions). A ref carries the g-prefix ("go to") pending
+  // state across keystrokes.
+  const gPendingRef = useRef(false);
 
   const counts = useMemo(
     () => ({
@@ -416,6 +408,184 @@ export function VibeMailApp() {
     showToast("Draft discarded.");
   };
 
+  // Archive / trash an arbitrary message (keyboard shortcuts act on whichever
+  // row is focused, not just the open thread).
+  const archiveMessage = (m: Message) => {
+    update(m.id, { status: "archived", labelIds: (m.labelIds || []).filter((l) => l !== "INBOX") });
+    showToast("Conversation archived.");
+    if (selectedId === m.id) setSelectedId(null);
+  };
+  const trashMessage = (m: Message) => {
+    update(m.id, { status: "trash", labelIds: ["TRASH"] });
+    showToast("Moved to Trash.");
+    if (selectedId === m.id) setSelectedId(null);
+  };
+
+  // ── Global keyboard shortcuts ─────────────────────────────────────────────
+  // Subscribe once; a ref always holds the latest closure so the handler sees
+  // current state without re-binding the listener on every render.
+  const keyHandlerRef = useRef<(e: KeyboardEvent) => void>(() => {});
+  const focusedRowId = (): string | null => {
+    const el = document.activeElement as HTMLElement | null;
+    return el?.getAttribute?.("data-vm-row-id") ?? null;
+  };
+  // The message a row-level action targets: the keyboard-focused row if any,
+  // otherwise the currently open thread.
+  const actionTarget = (): Message | null => {
+    const id = focusedRowId();
+    if (id) return messages.find((m) => m.id === id) ?? null;
+    return selected;
+  };
+  const focusRowBy = (dir: 1 | -1) => {
+    const rows = Array.from(document.querySelectorAll<HTMLElement>("[data-vm-row-id]"));
+    if (!rows.length) return;
+    const idx = rows.findIndex((r) => r === document.activeElement);
+    if (idx === -1) {
+      rows[0].focus();
+      return;
+    }
+    rows[Math.max(0, Math.min(rows.length - 1, idx + dir))].focus();
+  };
+
+  keyHandlerRef.current = (e: KeyboardEvent) => {
+    const el = e.target as HTMLElement | null;
+    const typing =
+      !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
+
+    // ⌘/Ctrl-K opens search — works even mid-typing.
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      setSearchMode(true);
+      return;
+    }
+
+    // Escape unwinds the top-most layer.
+    if (e.key === "Escape") {
+      if (helpOpen) setHelpOpen(false);
+      else if (composeOpen) setComposeOpen(false);
+      else if (searchMode) {
+        setSearchMode(false);
+        setQuery("");
+      } else if (selectionActive) clearSelection();
+      else if (selectedId) setSelectedId(null);
+      return;
+    }
+
+    // Everything below is a single-key shortcut: never hijack typing, modifier
+    // combos, or keystrokes while the compose drawer is open.
+    if (typing || e.metaKey || e.ctrlKey || e.altKey || composeOpen) return;
+
+    // "?" toggles the cheatsheet; while it's open, swallow other shortcuts.
+    if (e.key === "?") {
+      e.preventDefault();
+      setHelpOpen((v) => !v);
+      return;
+    }
+    if (helpOpen) return;
+
+    // "g" then a folder key — Gmail-style go-to navigation.
+    if (gPendingRef.current) {
+      gPendingRef.current = false;
+      const map: Record<string, string> = { i: "all", s: "starred", t: "sent", d: "drafts", a: "archived" };
+      const f = map[e.key.toLowerCase()];
+      if (f) {
+        e.preventDefault();
+        selectFolder(f);
+      }
+      return;
+    }
+    if (e.key.toLowerCase() === "g") {
+      gPendingRef.current = true;
+      setTimeout(() => {
+        gPendingRef.current = false;
+      }, 1200);
+      return;
+    }
+
+    switch (e.key) {
+      case "c":
+        e.preventDefault();
+        setReplyTo(null);
+        setDraft(null);
+        setComposeOpen(true);
+        return;
+      case "/":
+        e.preventDefault();
+        setSearchMode(true);
+        return;
+      case "j":
+      case "ArrowDown":
+        e.preventDefault();
+        focusRowBy(1);
+        return;
+      case "k":
+      case "ArrowUp":
+        e.preventDefault();
+        focusRowBy(-1);
+        return;
+      case "o": {
+        // Enter/Space are handled by the focused row itself; "o" is the
+        // global equivalent for opening whatever row is focused.
+        const id = focusedRowId();
+        const m = id ? messages.find((x) => x.id === id) : null;
+        if (m) {
+          e.preventDefault();
+          openMessage(m);
+        }
+        return;
+      }
+      case "r":
+        if (selected && selected.status !== "draft") {
+          e.preventDefault();
+          setDraft(null);
+          setReplyTo(selected);
+          setComposeOpen(true);
+        }
+        return;
+      case "s": {
+        const m = actionTarget();
+        if (m) {
+          e.preventDefault();
+          toggleStar(m);
+        }
+        return;
+      }
+      case "e": {
+        const m = actionTarget();
+        if (m) {
+          e.preventDefault();
+          archiveMessage(m);
+        }
+        return;
+      }
+      case "#": {
+        const m = actionTarget();
+        if (m) {
+          e.preventDefault();
+          trashMessage(m);
+        }
+        return;
+      }
+      case "u": {
+        const m = actionTarget();
+        if (m) {
+          e.preventDefault();
+          if (selectedId === m.id) markUnreadAndClose();
+          else toggleRead(m);
+        }
+        return;
+      }
+      default:
+        return;
+    }
+  };
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => keyHandlerRef.current(e);
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
+
   const sidebarSettings = {
     theme: settings.theme,
     onToggleTheme: settings.toggleTheme,
@@ -552,6 +722,7 @@ export function VibeMailApp() {
               mobile
               onClose={() => setMobileNavOpen(false)}
               onToggleRail={() => {}}
+              onShowShortcuts={() => setHelpOpen(true)}
               onSelect={(f) => {
                 selectFolder(f);
                 setMobileNavOpen(false);
@@ -585,6 +756,7 @@ export function VibeMailApp() {
         />
 
         {toastEl}
+        {helpOpen ? <KeyboardHelp onClose={() => setHelpOpen(false)} /> : null}
       </div>
     );
   }
@@ -617,6 +789,7 @@ export function VibeMailApp() {
         width={layout.sidebarW}
         onSelect={selectFolder}
         onToggleRail={() => patchLayout({ sidebarRail: !layout.sidebarRail })}
+        onShowShortcuts={() => setHelpOpen(true)}
         onCompose={() => {
           setReplyTo(null);
           setDraft(null);
@@ -741,6 +914,7 @@ export function VibeMailApp() {
         />
 
         {toastEl}
+        {helpOpen ? <KeyboardHelp onClose={() => setHelpOpen(false)} /> : null}
       </main>
     </div>
   );

@@ -60,6 +60,7 @@ export function ChromeBtn({
   return (
     <button
       type="button"
+      className="vm-tap"
       aria-label={label}
       title={label}
       onClick={onClick}
