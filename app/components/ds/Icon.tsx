@@ -6,6 +6,7 @@ import {
   Archive,
   ChevronDown,
   Inbox,
+  LogOut,
   Mail,
   MailOpen,
   Paperclip,
@@ -32,6 +33,7 @@ export type IconName =
   | "mail"
   | "mailOpen"
   | "settings"
+  | "logout"
   | "inbox"
   | "send"
   | "refresh"
@@ -50,6 +52,7 @@ const MAP: Record<Exclude<IconName, "dot">, LucideIcon> = {
   mail: Mail,
   mailOpen: MailOpen,
   settings: Settings,
+  logout: LogOut,
   inbox: Inbox,
   send: Send,
   refresh: RotateCw,

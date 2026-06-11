@@ -14,6 +14,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Button, Icon } from "@/components/ds";
+import { useAuth } from "@/providers/AuthProvider";
 import type { Density, GlassLevel, Theme } from "@/lib/shell-vars";
 import type { Label } from "@/lib/types";
 import { Hamburger } from "./Hamburger";
@@ -234,6 +235,8 @@ function SettingsPanel({
   anchorRef: React.RefObject<HTMLButtonElement | null>;
   panelRef: React.RefObject<HTMLDivElement | null>;
 }) {
+  const { signOut } = useAuth();
+  const [signOutHover, setSignOutHover] = useState(false);
   const [pos, setPos] = useState<{ bottom: number; left: number; width: number } | null>(null);
 
   useLayoutEffect(() => {
@@ -375,6 +378,37 @@ function SettingsPanel({
               transition: "left var(--dur-fast) var(--ease-standard)",
             }}
           />
+        </button>
+      </div>
+
+      {/* Sign out */}
+      <div style={{ borderTop: "1px solid var(--border-hairline)", paddingTop: 11 }}>
+        <button
+          type="button"
+          aria-label="Sign out"
+          onClick={signOut}
+          onMouseEnter={() => setSignOutHover(true)}
+          onMouseLeave={() => setSignOutHover(false)}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            width: "100%",
+            height: 32,
+            padding: "0 10px",
+            border: "1px solid var(--border-default)",
+            borderRadius: "var(--radius-sm)",
+            cursor: "pointer",
+            background: signOutHover ? "var(--glass-2)" : "transparent",
+            color: signOutHover ? "var(--danger, #ff6b6b)" : "var(--text-muted)",
+            fontFamily: "var(--font-mono)",
+            fontSize: "var(--text-row)",
+            transition:
+              "background var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard)",
+          }}
+        >
+          <Icon name="logout" size={15} color="currentColor" />
+          <span>Sign out</span>
         </button>
       </div>
     </div>,

@@ -1,7 +1,10 @@
 /* VibeMail Glass — global base + ported chrome rules.
    Pairs with styles/tokens.css (imported first in app/layout.tsx). */
 
-@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap");
+/* JetBrains Mono is loaded via next/font/google in app/layout.tsx and exposed
+   as --font-jetbrains-mono. The old Google Fonts @import was silently dropped
+   here because tokens.css is imported first, pushing this rule past the point
+   where @import is valid. */
 
 *,
 *::before,

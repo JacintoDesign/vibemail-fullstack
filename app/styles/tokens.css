@@ -9,8 +9,8 @@
 
 :root {
   /* ── Typography ─────────────────────────────────────────────── */
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono",
-    Menlo, Consolas, "Liberation Mono", monospace;
+  --font-mono: var(--font-jetbrains-mono), "JetBrains Mono", ui-monospace,
+    SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   --fw-regular: 400;
   --fw-medium: 500;
   --fw-bold: 700;
