@@ -47,6 +47,7 @@ export function handleError(res: VercelResponse, err: unknown): void {
       GMAIL_SEND_FAILED:     502,
       GMAIL_MODIFY_FAILED:   502,
       MESSAGE_DELETE_FAILED: 502,
+      GMAIL_LABELS_FAILED:   502,
       GMAIL_UNAVAILABLE:     503,
     };
     const status = statusMap[err.code] ?? 500;

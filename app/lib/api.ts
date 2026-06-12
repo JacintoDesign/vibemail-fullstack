@@ -198,6 +198,23 @@ export function searchMessages(opts: {
   );
 }
 
+/** One Gmail label with its counts, as returned by GET /api/v1/labels. */
+export interface GmailLabel {
+  id: string;
+  name: string;
+  type: "system" | "user";
+  messagesTotal: number;
+  messagesUnread: number;
+  threadsTotal: number;
+  threadsUnread: number;
+  color: { textColor?: string; backgroundColor?: string } | null;
+}
+
+/** GET /api/v1/labels — the Gmail label catalog with per-label counts. */
+export function listLabels(): Promise<{ labels: GmailLabel[] }> {
+  return apiFetch(`/labels`);
+}
+
 /** GET /api/v1/threads/:threadId — all synced messages in a thread, oldest-first. */
 export function getThread(threadId: string): Promise<{ threadId: string; messages: ApiMessage[] }> {
   return apiFetch(`/threads/${encodeURIComponent(threadId)}`);
