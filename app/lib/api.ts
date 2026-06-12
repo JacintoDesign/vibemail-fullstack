@@ -4,7 +4,7 @@
 // attaches the Bearer JWT and uses the relative `/api/v1` base path.
 
 import { apiFetch } from "./api-client";
-import type { Message, MessageStatus, ThreadMsg } from "./types";
+import type { Attachment, Message, MessageStatus, ThreadMsg } from "./types";
 
 // ── Wire shape (CONTRACT.md §3) ──────────────────────────────────────────────
 // The exact JSON the endpoints return. A strict subset of the UI `Message`.
@@ -28,6 +28,7 @@ export interface ApiMessage {
   isStarred: boolean;
   status: MessageStatus;
   draftId: string | null;
+  attachments?: Attachment[];
 }
 
 export interface MessagePage {
@@ -122,6 +123,7 @@ function threadMsgOf(api: ApiMessage): ThreadMsg {
     body: api.bodyPlain ?? "",
     bodyHtml: api.bodyHtml,
     gmailId: api.gmailId,
+    attachments: api.attachments ?? [],
   };
 }
 
@@ -147,7 +149,7 @@ export function toUiMessage(api: ApiMessage): Message {
     senderEmail: email,
     time: timeLabel(api.date),
     labels: userLabels(api.labelIds ?? []),
-    hasAttachment: false,
+    hasAttachment: (api.attachments?.length ?? 0) > 0,
     thread: [threadMsgOf(api)],
   };
 }
@@ -216,6 +218,39 @@ export async function uploadAttachment(file: File): Promise<UploadedAttachment> 
     throw new Error(`Storage upload failed (${put.status})`);
   }
   return { attachmentId, filename: file.name, mimeType, size: file.size };
+}
+
+/**
+ * GET /api/v1/attachments — download a received-mail attachment.
+ *
+ * The endpoint stages the bytes in Storage and returns a short-lived signed
+ * `downloadUrl` (rather than the bytes themselves) so large files aren't capped
+ * by the serverless response limit. The signed URL carries a Content-Disposition
+ * that forces a save, so navigating an anchor to it downloads without leaving
+ * the app. `gmailId` is the message id and `attachmentId` the Gmail part id;
+ * `filename`/`mimeType` set the saved file name and Content-Type.
+ */
+export async function downloadAttachment(att: {
+  gmailId: string;
+  attachmentId: string;
+  filename: string;
+  mimeType: string;
+}): Promise<void> {
+  const { downloadUrl, filename } = await apiFetch<{ downloadUrl: string; filename: string }>(
+    `/attachments${qs({
+      messageId: att.gmailId,
+      attachmentId: att.attachmentId,
+      filename: att.filename,
+      mimeType: att.mimeType,
+    })}`,
+  );
+  const a = document.createElement("a");
+  a.href = downloadUrl;
+  a.download = filename || att.filename || "attachment";
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 /** POST /api/v1/messages — compose + send (optionally in-thread, with attachments). */

@@ -1,5 +1,14 @@
 export type MessageStatus = 'inbox' | 'sent' | 'draft' | 'archived' | 'trash';
 
+export interface Attachment {
+  /** Gmail part `body.attachmentId` — required to fetch the bytes via
+   *  `messages.attachments.get`. Opaque, per-message; not globally stable. */
+  attachmentId: string;
+  filename:     string;
+  mimeType:     string;
+  size:         number;   // bytes, from the Gmail part `body.size`
+}
+
 export interface Message {
   // ── Supabase-managed ───────────────────────────────────────────────────
   id:         string;        // TEXT PRIMARY KEY — set to gmailId at insert
@@ -31,4 +40,7 @@ export interface Message {
   // ── Status & draft identity ────────────────────────────────────────────
   status:     MessageStatus;   // derived from labelIds at write time
   draftId:    string | null;   // Gmail drafts.id — only set for draft rows
+
+  // ── Attachments ────────────────────────────────────────────────────────
+  attachments: Attachment[];   // received-mail attachment metadata (bytes fetched on demand)
 }

@@ -10,7 +10,7 @@
  * before attaching.
  */
 
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { getClient } from '../db/index';
 import { ProviderError } from '../types/provider';
 
@@ -80,6 +80,49 @@ export async function createUpload(userId: string, filename: string): Promise<Cr
     throw new ProviderError('UPLOAD_FAILED', 'Could not create a signed upload URL', error);
   }
   return { attachmentId: path, uploadUrl: data.signedUrl };
+}
+
+/**
+ * Stage a received-mail attachment's bytes in Storage and return a short-lived
+ * signed URL the browser downloads directly. This bypasses the serverless
+ * response-body limit (~4.5 MB) the same way uploads bypass the request limit:
+ * the bytes go function → Storage and then browser → Storage, never through the
+ * function's own response — so 20 MB+ downloads work.
+ *
+ * The object path is keyed by message + attachment (the long opaque Gmail
+ * attachmentId is hashed to keep the path short and filesystem-safe), so a
+ * repeat download of the same file reuses one staged object instead of piling
+ * up copies. The signed URL carries a Content-Disposition that names the saved
+ * file and expires after a few minutes.
+ */
+export async function createInboundDownloadUrl(
+  userId: string,
+  messageId: string,
+  attachmentId: string,
+  bytes: Buffer,
+  filename: string,
+  mimeType: string,
+): Promise<string> {
+  await ensureBucket();
+  const idHash = createHash('sha256').update(attachmentId).digest('hex').slice(0, 32);
+  const path = `${userId}/inbound/${safeName(messageId)}/${idHash}`;
+  const client = getClient();
+
+  const { error: upErr } = await client.storage.from(BUCKET).upload(path, bytes, {
+    contentType: mimeType,
+    upsert: true,
+  });
+  if (upErr) {
+    throw new ProviderError('UPLOAD_FAILED', 'Could not stage attachment for download', upErr);
+  }
+
+  const { data, error } = await client.storage
+    .from(BUCKET)
+    .createSignedUrl(path, 300, { download: safeName(filename) });
+  if (error || !data) {
+    throw new ProviderError('ATTACHMENT_NOT_FOUND', 'Could not create a download URL', error);
+  }
+  return data.signedUrl;
 }
 
 /**

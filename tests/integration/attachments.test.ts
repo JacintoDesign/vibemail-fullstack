@@ -16,9 +16,9 @@ const mockCreate = jest.mocked(attachments.createUpload);
 const AUTH_HEADER = `Bearer ${signJwt({ sub: 'user-uuid-abc', email: 's@example.com', name: 'S' })}`;
 
 describe('POST /api/v1/attachments', () => {
-  it('405 — non-POST method', async () => {
+  it('405 — unsupported method (PUT)', async () => {
     const { state, res } = mockRes();
-    await handler(mockReq({ method: 'GET', headers: { authorization: AUTH_HEADER } }), res);
+    await handler(mockReq({ method: 'PUT', headers: { authorization: AUTH_HEADER } }), res);
     expect(state.statusCode).toBe(405);
   });
 
@@ -27,6 +27,19 @@ describe('POST /api/v1/attachments', () => {
     await handler(mockReq({ method: 'POST', body: { filename: 'a.txt', size: 10 } }), res);
     expect(state.statusCode).toBe(401);
     expect((state.body as { error: { code: string } }).error.code).toBe('UNAUTHORIZED');
+  });
+
+  it('GET 401 — download requires auth', async () => {
+    const { state, res } = mockRes();
+    await handler(mockReq({ method: 'GET', query: { messageId: 'm1', attachmentId: 'a1' } }), res);
+    expect(state.statusCode).toBe(401);
+  });
+
+  it('GET 400 — download missing messageId / attachmentId', async () => {
+    const { state, res } = mockRes();
+    await handler(mockReq({ method: 'GET', headers: { authorization: AUTH_HEADER }, query: { messageId: 'm1' } }), res);
+    expect(state.statusCode).toBe(400);
+    expect((state.body as { error: { code: string } }).error.code).toBe('MISSING_FIELDS');
   });
 
   it('400 — filename missing', async () => {

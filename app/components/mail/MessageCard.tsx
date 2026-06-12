@@ -6,9 +6,10 @@
 import { useState, type CSSProperties } from "react";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { decodeEntities } from "@/lib/text";
+import { downloadAttachment } from "@/lib/api";
 import { GlassPanel, Icon } from "@/components/ds";
 import { useSettings } from "@/providers/SettingsProvider";
-import type { ThreadMsg } from "@/lib/types";
+import type { Attachment, ThreadMsg } from "@/lib/types";
 
 export function MessageCard({
   msg,
@@ -271,8 +272,10 @@ function BodyToggle({
 // `sandbox` with no `allow-*` tokens blocks scripts, forms, popups, and
 // same-origin access, so remote markup can't touch the app.
 function ExpandedBody({ msg, view, fill }: { msg: ThreadMsg; view: "plain" | "html"; fill?: boolean }) {
-  if (view === "html" && msg.bodyHtml) {
-    return (
+  const attachments = msg.attachments ?? [];
+
+  const bodyEl =
+    view === "html" && msg.bodyHtml ? (
       <div
         className="vm-msg-body"
         style={
@@ -297,21 +300,126 @@ function ExpandedBody({ msg, view, fill }: { msg: ThreadMsg; view: "plain" | "ht
           }}
         />
       </div>
+    ) : (
+      <div
+        className="vm-msg-body"
+        style={{
+          padding: "16px",
+          fontFamily: "var(--font-mono)",
+          fontSize: "var(--text-body)",
+          lineHeight: "var(--lh-body)",
+          color: "var(--text-body-ink)",
+          whiteSpace: "pre-wrap",
+        }}
+      >
+        {decodeEntities(msg.body ?? "")}
+      </div>
     );
-  }
+
+  if (attachments.length === 0) return bodyEl;
+
   return (
     <div
-      className="vm-msg-body"
+      style={
+        fill ? { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" } : undefined
+      }
+    >
+      {bodyEl}
+      <AttachmentList attachments={attachments} gmailId={msg.gmailId} />
+    </div>
+  );
+}
+
+// A human-readable byte size: 0 B, 812 B, 14.2 KB, 3.1 MB.
+function formatBytes(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "0 B";
+  if (n < 1024) return `${n} B`;
+  const kb = n / 1024;
+  if (kb < 1024) return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} KB`;
+  const mb = kb / 1024;
+  return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
+}
+
+// Downloadable attachment rows shown under an expanded message body. Each row
+// fetches its bytes from Gmail on click (via the /attachments endpoint) and
+// hands the browser a save dialog. Download state is tracked per-row so a slow
+// fetch can't be double-fired.
+function AttachmentList({ attachments, gmailId }: { attachments: Attachment[]; gmailId?: string }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+
+  async function onDownload(att: Attachment) {
+    if (!gmailId || busy) return;
+    setBusy(att.attachmentId);
+    setFailed(null);
+    try {
+      await downloadAttachment({
+        gmailId,
+        attachmentId: att.attachmentId,
+        filename: att.filename,
+        mimeType: att.mimeType,
+      });
+    } catch {
+      setFailed(att.attachmentId);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div
+      className="vm-msg-attachments"
       style={{
-        padding: "16px",
-        fontFamily: "var(--font-mono)",
-        fontSize: "var(--text-body)",
-        lineHeight: "var(--lh-body)",
-        color: "var(--text-body-ink)",
-        whiteSpace: "pre-wrap",
+        flexShrink: 0,
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 8,
+        padding: "12px 16px 16px",
+        borderTop: "1px solid var(--border-hairline)",
       }}
     >
-      {decodeEntities(msg.body ?? "")}
+      {attachments.map((att) => {
+        const isBusy = busy === att.attachmentId;
+        const isFailed = failed === att.attachmentId;
+        return (
+          <button
+            key={att.attachmentId}
+            type="button"
+            title={`Download ${att.filename}`}
+            disabled={!gmailId || isBusy}
+            onClick={() => onDownload(att)}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              maxWidth: "100%",
+              padding: "6px 10px",
+              border: `1px solid ${isFailed ? "var(--text-danger, #c0392b)" : "var(--border-default)"}`,
+              borderRadius: "var(--radius-sm)",
+              background: "var(--glass-1, transparent)",
+              color: "var(--text-primary)",
+              fontFamily: "var(--font-mono)",
+              fontSize: "var(--text-micro)",
+              cursor: !gmailId || isBusy ? "default" : "pointer",
+              opacity: isBusy ? 0.6 : 1,
+            }}
+          >
+            <Icon name="paperclip" size={14} />
+            <span
+              style={{
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {att.filename}
+            </span>
+            <span style={{ color: "var(--text-muted)", flexShrink: 0 }}>
+              {isFailed ? "failed — retry" : isBusy ? "…" : formatBytes(att.size)}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }

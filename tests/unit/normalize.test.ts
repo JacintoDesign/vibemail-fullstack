@@ -17,6 +17,7 @@ import {
   getHeader,
   findPartByMimeType,
   extractBodies,
+  extractAttachments,
   normalizeMessage,
   toRow,
   rowToMessage,
@@ -175,6 +176,51 @@ describe('extractBodies', () => {
   });
 });
 
+// ── extractAttachments ───────────────────────────────────────────────────────
+
+describe('extractAttachments', () => {
+  it('returns [] when there are no parts', () => {
+    expect(extractAttachments(undefined)).toEqual([]);
+    expect(extractAttachments([])).toEqual([]);
+  });
+
+  it('collects parts that have a filename and a body.attachmentId', () => {
+    const parts: gmail_v1.Schema$MessagePart[] = [
+      { mimeType: 'text/plain', body: { data: 'aGk' } },
+      {
+        mimeType: 'application/pdf',
+        filename: 'report.pdf',
+        body: { attachmentId: 'att-123', size: 2048 },
+      },
+    ];
+    expect(extractAttachments(parts)).toEqual([
+      { attachmentId: 'att-123', filename: 'report.pdf', mimeType: 'application/pdf', size: 2048 },
+    ]);
+  });
+
+  it('skips inline parts that have an attachmentId but no filename', () => {
+    const parts: gmail_v1.Schema$MessagePart[] = [
+      { mimeType: 'image/png', filename: '', body: { attachmentId: 'inline-1', size: 10 } },
+    ];
+    expect(extractAttachments(parts)).toEqual([]);
+  });
+
+  it('finds attachments nested inside multipart/mixed', () => {
+    const parts: gmail_v1.Schema$MessagePart[] = [
+      {
+        mimeType: 'multipart/mixed',
+        parts: [
+          { mimeType: 'text/plain', body: { data: 'aGk' } },
+          { mimeType: 'image/jpeg', filename: 'photo.jpg', body: { attachmentId: 'att-9', size: 5 } },
+        ],
+      },
+    ];
+    expect(extractAttachments(parts)).toEqual([
+      { attachmentId: 'att-9', filename: 'photo.jpg', mimeType: 'image/jpeg', size: 5 },
+    ]);
+  });
+});
+
 // ── normalizeMessage ─────────────────────────────────────────────────────────
 
 describe('normalizeMessage', () => {
@@ -211,6 +257,23 @@ describe('normalizeMessage', () => {
     expect(result.snippet).toBe('Test snippet text');
     expect(result.userId).toBe(userId);
     expect(result.labelIds).toEqual(['INBOX']);
+  });
+
+  it('extracts attachment metadata from the payload parts', () => {
+    const msg = buildMsg(['INBOX']);
+    msg.payload!.parts!.push({
+      mimeType: 'application/pdf',
+      filename: 'invoice.pdf',
+      body: { attachmentId: 'att-77', size: 4096 },
+    });
+    const result = normalizeMessage(msg, userId);
+    expect(result.attachments).toEqual([
+      { attachmentId: 'att-77', filename: 'invoice.pdf', mimeType: 'application/pdf', size: 4096 },
+    ]);
+  });
+
+  it('defaults attachments to [] for a message with no attachment parts', () => {
+    expect(normalizeMessage(buildMsg(['INBOX']), userId).attachments).toEqual([]);
   });
 
   it('maps From / To headers to from / to (not from_address / to_address)', () => {
@@ -251,19 +314,25 @@ describe('normalizeMessage', () => {
 
 describe('toRow — camelCase Message → snake_case MessageRow', () => {
   const msg = {
-    userId:    'user-uuid-123',
-    gmailId:   'gmail_id_abc',
-    threadId:  'thread_id_xyz',
-    labelIds:  ['INBOX', 'UNREAD'],
-    from:      'Alice <alice@example.com>',
-    to:        'bob@example.com',
-    subject:   'Hello',
-    date:      'Mon, 01 Jan 2024 00:00:00 +0000',
-    snippet:   'short snippet',
-    bodyPlain: 'plain text',
-    bodyHtml:  '<p>html text</p>',
-    isRead:    false,
-    isStarred: true,
+    userId:       'user-uuid-123',
+    gmailId:      'gmail_id_abc',
+    threadId:     'thread_id_xyz',
+    labelIds:     ['INBOX', 'UNREAD'],
+    internalDate: '1704067200000',
+    from:         'Alice <alice@example.com>',
+    to:           'bob@example.com',
+    subject:      'Hello',
+    date:         'Mon, 01 Jan 2024 00:00:00 +0000',
+    snippet:      'short snippet',
+    bodyPlain:    'plain text',
+    bodyHtml:     '<p>html text</p>',
+    isRead:       false,
+    isStarred:    true,
+    status:       'inbox' as const,
+    draftId:      null,
+    attachments:  [
+      { attachmentId: 'att-1', filename: 'a.pdf', mimeType: 'application/pdf', size: 12 },
+    ],
   };
 
   it('maps from → from_address and to → to_address (SQL reserved word avoidance)', () => {
@@ -283,6 +352,11 @@ describe('toRow — camelCase Message → snake_case MessageRow', () => {
     expect(row.body_plain).toBe(msg.bodyPlain);
     expect(row.body_html).toBe(msg.bodyHtml);
   });
+
+  it('carries the attachments array through unchanged', () => {
+    const row = toRow(msg);
+    expect(row.attachments).toEqual(msg.attachments);
+  });
 });
 
 describe('rowToMessage — snake_case DbMessageRow → camelCase Message', () => {
@@ -301,6 +375,11 @@ describe('rowToMessage — snake_case DbMessageRow → camelCase Message', () =>
     body_html:    '<p>html</p>',
     is_read:      true,
     is_starred:   false,
+    status:       'inbox',
+    draft_id:     null,
+    attachments:  [
+      { attachmentId: 'att-1', filename: 'a.pdf', mimeType: 'application/pdf', size: 12 },
+    ],
     created_at:   '2024-01-01T00:00:00.000Z',
     updated_at:   '2024-01-02T00:00:00.000Z',
   };

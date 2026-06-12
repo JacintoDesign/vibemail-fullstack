@@ -8,6 +8,14 @@ import type { CSSProperties } from "react";
 
 export type MessageStatus = "inbox" | "sent" | "draft" | "archived" | "trash";
 
+export interface Attachment {
+  /** Gmail part `body.attachmentId` — passed back to the download endpoint. */
+  attachmentId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+}
+
 export interface ThreadMsg {
   from: string;
   email: string;
@@ -16,8 +24,11 @@ export interface ThreadMsg {
   body: string;
   /** Decoded HTML body, rendered in a sandboxed iframe when `body` is empty. */
   bodyHtml?: string | null;
-  /** Gmail message id for this thread message (used by "View in Gmail"). */
+  /** Gmail message id for this thread message (used by "View in Gmail" and to
+   *  fetch attachment bytes on demand). */
   gmailId?: string;
+  /** Received-mail attachments. Bytes are fetched lazily on download. */
+  attachments?: Attachment[];
 }
 
 export interface Message {

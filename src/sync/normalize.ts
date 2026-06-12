@@ -1,5 +1,5 @@
 import { gmail_v1 } from 'googleapis';
-import { Message, MessageStatus } from '../types/message';
+import { Message, MessageStatus, Attachment } from '../types/message';
 import { ProviderError } from '../types/provider';
 import { getClient } from '../db';
 
@@ -80,6 +80,39 @@ export function extractBodies(msg: gmail_v1.Schema$Message): {
   };
 }
 
+// ── Attachment extraction ────────────────────────────────────────────────────
+
+/**
+ * Recursively collects attachment metadata from a message parts tree. An
+ * attachment part is one that carries both a `filename` and a
+ * `body.attachmentId` — the latter is what `messages.attachments.get` needs to
+ * pull the bytes on demand. Inline parts with no filename (e.g. content-id
+ * images referenced from the HTML body) are skipped so they don't surface as
+ * downloadable files.
+ */
+export function extractAttachments(
+  parts: gmail_v1.Schema$MessagePart[] | undefined,
+): Attachment[] {
+  if (!parts || parts.length === 0) return [];
+  const out: Attachment[] = [];
+  for (const part of parts) {
+    const attachmentId = part.body?.attachmentId;
+    const filename = part.filename;
+    if (attachmentId && filename && filename.trim() !== '') {
+      out.push({
+        attachmentId,
+        filename,
+        mimeType: part.mimeType ?? 'application/octet-stream',
+        size: part.body?.size ?? 0,
+      });
+    }
+    if (part.parts && part.parts.length > 0) {
+      out.push(...extractAttachments(part.parts));
+    }
+  }
+  return out;
+}
+
 // ── Normalization ────────────────────────────────────────────────────────────
 
 export function normalizeMessage(
@@ -90,6 +123,7 @@ export function normalizeMessage(
   const headers  = msg.payload?.headers ?? [];
   const labelIds = msg.labelIds ?? [];
   const { bodyPlain, bodyHtml } = extractBodies(msg);
+  const attachments = extractAttachments(msg.payload?.parts);
 
   return {
     userId,
@@ -108,6 +142,7 @@ export function normalizeMessage(
     isStarred:    labelIds.includes('STARRED'),
     status:       deriveStatus(labelIds),
     draftId,
+    attachments,
   };
 }
 
@@ -129,6 +164,7 @@ export interface MessageRow {
   is_read:      boolean;
   is_starred:   boolean;
   status:       string;
+  attachments:  Attachment[];   // jsonb column — received-mail attachment metadata
   // draft_id is intentionally excluded — it is only written by draft-specific
   // endpoints (POST /drafts, PATCH /drafts/:id/send). Omitting it here ensures
   // webhook syncs never overwrite the draftId that was set at draft-creation time.
@@ -158,6 +194,7 @@ export function toRow(
     is_read:      msg.isRead,
     is_starred:   msg.isStarred,
     status:       msg.status,
+    attachments:  msg.attachments,
     // draft_id deliberately omitted — see MessageRow comment above
     created_at:   internalDateToIso(msg.internalDate),
   };
@@ -182,6 +219,7 @@ export interface DbMessageRow {
   is_starred:   boolean;
   status:       string;
   draft_id:     string | null;
+  attachments:  Attachment[] | null;   // null on rows synced before the column existed
   created_at:   string;
   updated_at:   string;
 }
@@ -207,6 +245,7 @@ export function rowToMessage(row: DbMessageRow): Message {
     isStarred:    row.is_starred,
     status:       row.status as Message['status'],
     draftId:      row.draft_id,
+    attachments:  row.attachments ?? [],
   };
 }
 
@@ -215,9 +254,14 @@ export function rowToMessage(row: DbMessageRow): Message {
 export async function upsertMessages(
   messages: Array<Omit<Message, 'id' | 'createdAt' | 'updatedAt'>>,
 ): Promise<void> {
+  // Cast required: `attachments` is a new jsonb column added by the schema
+  // migration and not yet reflected in the Supabase generated types, so the
+  // client rejects it as an excess property. Same pattern as the PATCH handler.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows = messages.map(toRow) as any[];
   const { error } = await getClient()
     .from('messages')
-    .upsert(messages.map(toRow), { onConflict: 'gmail_id' });
+    .upsert(rows, { onConflict: 'gmail_id' });
 
   if (error) {
     throw new ProviderError('SYNC_UPSERT_FAILED', error.message, error);
