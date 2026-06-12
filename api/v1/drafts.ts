@@ -35,16 +35,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   const body = req.body as Record<string, unknown> ?? {};
   const { to, subject, body: msgBody, threadId } = body;
 
-  if (!to || !subject || !msgBody) {
-    errorResponse(res, 400, 'MISSING_FIELDS', 'Request body must include to, subject, and body');
+  // Subject is optional — an empty/absent subject is allowed (Gmail shows
+  // "(no subject)"). Default it to an empty string. Only `to` and `body` are
+  // required.
+  const subjectStr = subject === undefined || subject === null ? '' : subject;
+
+  if (!to || !msgBody) {
+    errorResponse(res, 400, 'MISSING_FIELDS', 'Request body must include to and body');
     return;
   }
-  if (typeof to !== 'string' || typeof subject !== 'string' || typeof msgBody !== 'string') {
-    errorResponse(res, 400, 'MISSING_FIELDS', 'to, subject, and body must be strings');
+  if (typeof to !== 'string' || typeof msgBody !== 'string' || typeof subjectStr !== 'string') {
+    errorResponse(res, 400, 'MISSING_FIELDS', 'to and body must be strings; subject, if present, must be a string');
     return;
   }
-  if (to.trim() === '' || subject.trim() === '' || msgBody.trim() === '') {
-    errorResponse(res, 400, 'MISSING_FIELDS', 'to, subject, and body must not be empty strings');
+  if (to.trim() === '' || msgBody.trim() === '') {
+    errorResponse(res, 400, 'MISSING_FIELDS', 'to and body must not be empty strings');
     return;
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
@@ -64,7 +69,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
 
     // Build RFC 2822 raw message.
-    const raw = buildRaw(from, { to, subject, body: msgBody });
+    const raw = buildRaw(from, { to, subject: subjectStr, body: msgBody });
 
     // Create the draft via Gmail drafts API.
     let draftId:   string;

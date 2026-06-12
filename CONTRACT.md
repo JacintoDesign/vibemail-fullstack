@@ -296,7 +296,7 @@ Content-Type: application/json
 Body:
 {
   to:             string    required   Recipient email address (RFC 5321)
-  subject:        string    required   Email subject line
+  subject:        string    optional   Email subject line (empty/absent allowed — sends as "(no subject)")
   body:           string    required   Message body — plain text or HTML
   threadId?:      string    optional   Existing Gmail thread ID; include to reply in-thread
   attachmentIds?: string[]  optional   IDs returned by POST /api/v1/attachments to attach
@@ -315,7 +315,7 @@ Body:
 
 | HTTP | `error.code` | Condition |
 |---|---|---|
-| 400 | `MISSING_FIELDS` | One or more of `to`, `subject`, `body` is absent or empty string |
+| 400 | `MISSING_FIELDS` | `to` or `body` is absent or empty string (subject is optional) |
 | 400 | `INVALID_RECIPIENT` | `to` does not pass RFC 5321 email validation |
 | 401 | `UNAUTHORIZED` | JWT is missing, malformed, expired, or signature invalid |
 | 404 | `THREAD_NOT_FOUND` | `threadId` was provided but Gmail returned 404 for that thread |
@@ -503,7 +503,7 @@ Content-Type: application/json
 Body:
 {
   to:        string    required   Recipient email address (RFC 5321)
-  subject:   string    required   Email subject line
+  subject:   string    optional   Email subject line (empty/absent allowed — sends as "(no subject)")
   body:      string    required   Message body — plain text or HTML
   threadId?: string    optional   Existing Gmail thread ID for a draft reply
 }
@@ -521,7 +521,7 @@ Body:
 
 | HTTP | `error.code` | Condition |
 |---|---|---|
-| 400 | `MISSING_FIELDS` | One or more of `to`, `subject`, `body` is absent or empty string |
+| 400 | `MISSING_FIELDS` | `to` or `body` is absent or empty string (subject is optional) |
 | 400 | `INVALID_RECIPIENT` | `to` does not pass RFC 5321 email validation |
 | 401 | `UNAUTHORIZED` | JWT is missing, malformed, expired, or signature invalid |
 | 429 | `GMAIL_RATE_LIMITED` | Gmail API responded with HTTP 429 |

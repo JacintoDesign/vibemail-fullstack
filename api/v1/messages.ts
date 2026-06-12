@@ -112,17 +112,22 @@ async function handleSend(req: VercelRequest, res: VercelResponse): Promise<void
   const body = req.body as Record<string, unknown>;
   const { to, subject, body: msgBody, threadId, attachmentIds } = body ?? {};
 
+  // Subject is optional — an empty/absent subject is allowed (Gmail shows
+  // "(no subject)"). Default it to an empty string. Only `to` and `body` are
+  // required.
+  const subjectStr = subject === undefined || subject === null ? '' : subject;
+
   // Validate required fields.
-  if (!to || !subject || !msgBody) {
+  if (!to || !msgBody) {
     errorResponse(
       res, 400, 'MISSING_FIELDS',
-      'Request body must include to, subject, and body',
+      'Request body must include to and body',
     );
     return;
   }
 
-  if (typeof to !== 'string' || typeof subject !== 'string' || typeof msgBody !== 'string') {
-    errorResponse(res, 400, 'MISSING_FIELDS', 'to, subject, and body must be strings');
+  if (typeof to !== 'string' || typeof msgBody !== 'string' || typeof subjectStr !== 'string') {
+    errorResponse(res, 400, 'MISSING_FIELDS', 'to and body must be strings; subject, if present, must be a string');
     return;
   }
 
@@ -132,8 +137,8 @@ async function handleSend(req: VercelRequest, res: VercelResponse): Promise<void
     return;
   }
 
-  if (to.trim() === '' || subject.trim() === '' || msgBody.trim() === '') {
-    errorResponse(res, 400, 'MISSING_FIELDS', 'to, subject, and body must not be empty strings');
+  if (to.trim() === '' || msgBody.trim() === '') {
+    errorResponse(res, 400, 'MISSING_FIELDS', 'to and body must not be empty strings');
     return;
   }
 
@@ -150,7 +155,7 @@ async function handleSend(req: VercelRequest, res: VercelResponse): Promise<void
   try {
     const message = await sendMessage(payload.sub, {
       to,
-      subject,
+      subject: subjectStr,
       body: msgBody,
       threadId: typeof threadId === 'string' ? threadId : undefined,
       attachmentIds: ids,

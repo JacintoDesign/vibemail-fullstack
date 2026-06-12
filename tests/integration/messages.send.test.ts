@@ -166,7 +166,7 @@ describe('POST /api/v1/messages', () => {
     expect((state.body as { error: { code: string } }).error.code).toBe('MISSING_FIELDS');
   });
 
-  it('400 MISSING_FIELDS — subject is absent', async () => {
+  it('201 — subject is absent (optional, sends as "(no subject)")', async () => {
     const { state, res } = mockRes();
     await handler(
       mockReq({
@@ -176,8 +176,11 @@ describe('POST /api/v1/messages', () => {
       }),
       res,
     );
-    expect(state.statusCode).toBe(400);
-    expect((state.body as { error: { code: string } }).error.code).toBe('MISSING_FIELDS');
+    expect(state.statusCode).toBe(201);
+    expect(mockSendMessage).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ subject: '' }),
+    );
   });
 
   it('400 MISSING_FIELDS — body is absent', async () => {
@@ -208,7 +211,7 @@ describe('POST /api/v1/messages', () => {
     expect((state.body as { error: { code: string } }).error.code).toBe('MISSING_FIELDS');
   });
 
-  it('400 MISSING_FIELDS — subject is an empty string', async () => {
+  it('201 — subject is an empty string (allowed)', async () => {
     const { state, res } = mockRes();
     await handler(
       mockReq({
@@ -218,8 +221,11 @@ describe('POST /api/v1/messages', () => {
       }),
       res,
     );
-    expect(state.statusCode).toBe(400);
-    expect((state.body as { error: { code: string } }).error.code).toBe('MISSING_FIELDS');
+    expect(state.statusCode).toBe(201);
+    expect(mockSendMessage).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ subject: '' }),
+    );
   });
 
   it('400 MISSING_FIELDS — a non-string value for to', async () => {

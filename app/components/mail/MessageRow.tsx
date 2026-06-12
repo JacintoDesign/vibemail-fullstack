@@ -241,9 +241,10 @@ export function MessageRow({
           fontSize: "var(--text-row)",
           fontWeight: unread ? "var(--fw-medium)" : "var(--fw-regular)",
           color: unread ? "var(--text-secondary)" : "var(--text-muted)",
+          fontStyle: m.subject ? undefined : "italic",
         }}
       >
-        {m.subject}
+        {m.subject || "(no subject)"}
       </div>
 
       {/* Row 3 — preview (hidden in the compact density) */}
