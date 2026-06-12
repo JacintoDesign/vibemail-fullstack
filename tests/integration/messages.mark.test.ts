@@ -65,9 +65,9 @@ describe('PATCH /api/v1/messages/:id', () => {
 
   // ── Method guard ───────────────────────────────────────────────────────────
 
-  it('405 — rejects non-PATCH methods', async () => {
+  it('405 — rejects unsupported methods', async () => {
     const { state, res } = mockRes();
-    await handler(mockReq({ method: 'GET', query: { id: 'any' } }), res);
+    await handler(mockReq({ method: 'PUT', query: { id: 'any' } }), res);
     expect(state.statusCode).toBe(405);
     expect((state.body as { error: { code: string } }).error.code).toBe('METHOD_NOT_ALLOWED');
   });
