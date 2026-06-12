@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "a3f9d21b-0c47-4e8a-b165-7e2f3a9c0d4b",
     "name": "VibeMail API",
-    "description": "Complete request coverage for the VibeMail backend API (CONTRACT.md §4).\n\n## Collection variables\n\n| Variable | Default | Description |\n|---|---|---|\n| `baseUrl` | `http://localhost:3000` | Switch to your Vercel deployment URL for production testing |\n| `jwt` | *(empty)* | JWT issued by the OAuth callback. Copy the `token=` param from the redirect URL. |\n| `messageId` | `replace_with_real_gmail_message_id` | Gmail message ID from `messages[].gmailId` in a list response. Used by §4.5 requests. |\n| `threadId` | `replace_with_real_gmail_thread_id` | Gmail thread ID from `messages[].threadId` in a list response. Used by §4.6 requests. |\n| `draftMessageId` | *(empty)* | `message.id` returned by Draft Create (§4.8). Populate before running §4.9 and §4.10 requests. |\n\nEach folder contains one happy-path request and one request per named error code from CONTRACT.md §4.",
+    "description": "Complete request coverage for the VibeMail backend API (CONTRACT.md §4).\n\n## Collection variables\n\n| Variable | Default | Description |\n|---|---|---|\n| `baseUrl` | `http://localhost:3000` | Switch to your Vercel deployment URL for production testing |\n| `jwt` | *(empty)* | JWT issued by the OAuth callback. Copy the `token=` param from the redirect URL. |\n| `messageId` | `replace_with_real_gmail_message_id` | Gmail message ID from `messages[].gmailId` in a list response. Used by §4.5 requests. |\n| `threadId` | `replace_with_real_gmail_thread_id` | Gmail thread ID from `messages[].threadId` in a list response. Used by §4.6 requests. |\n| `labelId` | `CATEGORY_SOCIAL` | Label id for the add/remove-label requests (§4.15). |\n| `attachmentId` | *(empty)* | Received attachment's `body.attachmentId` (§4.12 download). |\n| `pubsubToken` | *(empty)* | `GOOGLE_PUBSUB_VERIFICATION_TOKEN` for the webhook (§4.18). |\n| `cronSecret` | *(empty)* | `CRON_SECRET` for the cron endpoint (§4.19). |\n| `draftMessageId` | *(empty)* | `message.id` returned by Draft Create (§4.8). Populate before running §4.9 and §4.10 requests. |\n\nFolders §4.1–§4.11 cover CONTRACT.md §4. §4.12 covers attachment upload/download. §4.13–§4.16 cover the post-contract additions (single-message GET, hard delete, add/remove label, label catalog). §4.17–§4.19 cover OAuth initiation, the Pub/Sub webhook, and the renew-watch cron. Each folder has one happy-path request plus one per named error code.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -35,6 +35,26 @@
       "value": "",
       "type": "string",
       "description": "The message.id returned by POST /api/v1/drafts (= Gmail messageId of the draft). Required for PATCH and DELETE /api/v1/drafts/:id. Populate this after running the Draft Create happy path."
+    },
+    {
+      "key": "labelId",
+      "value": "CATEGORY_SOCIAL",
+      "description": "A Gmail label id for the add/remove-label requests (§4.15). Use a CATEGORY_* or user Label_ id, not a PATCH-owned label."
+    },
+    {
+      "key": "attachmentId",
+      "value": "",
+      "description": "A received attachment's body.attachmentId (from a message's attachments[]). Used by §4.12 download."
+    },
+    {
+      "key": "pubsubToken",
+      "value": "",
+      "description": "GOOGLE_PUBSUB_VERIFICATION_TOKEN — validates the §4.18 webhook push."
+    },
+    {
+      "key": "cronSecret",
+      "value": "",
+      "description": "CRON_SECRET — Bearer token Vercel sends to the §4.19 cron endpoint."
     }
   ],
   "item": [
@@ -189,7 +209,7 @@
     },
     {
       "name": "4.2 Message List",
-      "description": "GET /api/v1/messages\n\nReturns a cursor-paginated page of messages stored in Supabase for the authenticated user, newest-first.\n\nRequires `Authorization: Bearer {{jwt}}`.",
+      "description": "GET /api/v1/messages\n\nReturns a cursor-paginated page of messages stored in Supabase for the authenticated user, newest-first.\n\nRequires `Authorization: Bearer {{jwt}}`.\n\nAlso supports `?status=inbox|sent|draft|archived|trash` to filter by derived status (used to page the Archive folder).",
       "item": [
         {
           "id": "02000001-0000-0000-0000-000000000001",
@@ -441,6 +461,231 @@
               ]
             },
             "description": "Fetches messages that carry the `INBOX` label. Any Gmail label ID is accepted (INBOX, SENT, STARRED, UNREAD, SPAM, TRASH, or custom label IDs).\n\nExpected response: **200 OK** — same shape, filtered to messages whose `labelIds` array contains `\"INBOX\"`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const response = pm.response.json();",
+                  "const messages = response.messages || [];",
+                  "const nextCursor = response.nextCursor;",
+                  "",
+                  "const rows = messages.map(msg => {",
+                  "  const isUnread = msg.labelIds && msg.labelIds.includes('UNREAD');",
+                  "  const labels = (msg.labelIds || [])",
+                  "    .filter(l => l !== 'UNREAD')",
+                  "    .map(l => `<span style=\"background:#e8f0fe;color:#1a73e8;border-radius:4px;padding:1px 6px;font-size:11px;margin-right:3px;\">${l}</span>`)",
+                  "    .join('');",
+                  "  const date = new Date(msg.date).toLocaleString();",
+                  "  const fontWeight = isUnread ? 'bold' : 'normal';",
+                  "  const unreadDot = isUnread",
+                  "    ? '<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:#1a73e8;margin-right:6px;\"></span>'",
+                  "    : '<span style=\"display:inline-block;width:8px;height:8px;margin-right:6px;\"></span>';",
+                  "",
+                  "  return `",
+                  "    <tr style=\"border-bottom:1px solid #f0f0f0;\">",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};white-space:nowrap;\">${unreadDot}${escapeHtml(msg.from)}</td>",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};\">${escapeHtml(msg.subject)}</td>",
+                  "      <td style=\"padding:10px 8px;color:#555;font-size:12px;\">${escapeHtml(msg.snippet ? msg.snippet.substring(0, 80) + '…' : '')}</td>",
+                  "      <td style=\"padding:10px 8px;white-space:nowrap;\">${labels}</td>",
+                  "      <td style=\"padding:10px 8px;color:#888;font-size:12px;white-space:nowrap;\">${date}</td>",
+                  "    </tr>`;",
+                  "}).join('');",
+                  "",
+                  "function escapeHtml(str) {",
+                  "  return String(str || '')",
+                  "    .replace(/&#39;/g, \"'\")",
+                  "    .replace(/&amp;/g, '&')",
+                  "    .replace(/</g, '<')",
+                  "    .replace(/>/g, '>')",
+                  "    .replace(/\"/g, '\"');",
+                  "}",
+                  "",
+                  "const cursorBadge = nextCursor",
+                  "  ? `<div style=\"margin-top:12px;padding:8px 12px;background:#fff8e1;border-left:4px solid #f9a825;font-size:12px;color:#555;\">",
+                  "       <strong>Next cursor:</strong> <code style=\"font-size:11px;\">${nextCursor}</code>",
+                  "     </div>`",
+                  "  : `<div style=\"margin-top:12px;padding:8px 12px;background:#e8f5e9;border-left:4px solid #43a047;font-size:12px;color:#555;\">No more pages — this is the last page.</div>`;",
+                  "",
+                  "const html = `",
+                  "<style>",
+                  "  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 16px; background: #fff; }",
+                  "  table { width: 100%; border-collapse: collapse; font-size: 13px; }",
+                  "  th { text-align: left; padding: 8px; background: #f8f9fa; color: #444; font-weight: 600; border-bottom: 2px solid #e0e0e0; }",
+                  "  tr:hover { background: #f5f5f5; }",
+                  "</style>",
+                  "<h3 style=\"margin:0 0 12px;color:#202124;\">📬 Messages <span style=\"font-size:13px;font-weight:normal;color:#888;\">(${messages.length} shown)</span></h3>",
+                  "<table>",
+                  "  <thead>",
+                  "    <tr>",
+                  "      <th>From</th>",
+                  "      <th>Subject</th>",
+                  "      <th>Snippet</th>",
+                  "      <th>Labels</th>",
+                  "      <th>Date</th>",
+                  "    </tr>",
+                  "  </thead>",
+                  "  <tbody>",
+                  "    ${rows || '<tr><td colspan=\"5\" style=\"padding:20px;text-align:center;color:#888;\">No messages found.</td></tr>'}",
+                  "  </tbody>",
+                  "</table>",
+                  "${cursorBadge}",
+                  "`;",
+                  "",
+                  "pm.visualizer.set(html);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "8853625a-bf78-413a-81ff-0de7c29a5990",
+          "name": "Happy path — filter by status (archived)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages?status=archived&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "archived",
+                  "description": "Derived status: inbox|sent|draft|archived|trash. 'archived' = no INBOX/SENT/DRAFT/TRASH label — the only way to page Archive server-side."
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Filters the list by derived `status`. **200 OK** — `{ messages: Message[], nextCursor }`, every row has `status: \"archived\"`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const response = pm.response.json();",
+                  "const messages = response.messages || [];",
+                  "const nextCursor = response.nextCursor;",
+                  "",
+                  "const rows = messages.map(msg => {",
+                  "  const isUnread = msg.labelIds && msg.labelIds.includes('UNREAD');",
+                  "  const labels = (msg.labelIds || [])",
+                  "    .filter(l => l !== 'UNREAD')",
+                  "    .map(l => `<span style=\"background:#e8f0fe;color:#1a73e8;border-radius:4px;padding:1px 6px;font-size:11px;margin-right:3px;\">${l}</span>`)",
+                  "    .join('');",
+                  "  const date = new Date(msg.date).toLocaleString();",
+                  "  const fontWeight = isUnread ? 'bold' : 'normal';",
+                  "  const unreadDot = isUnread",
+                  "    ? '<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:#1a73e8;margin-right:6px;\"></span>'",
+                  "    : '<span style=\"display:inline-block;width:8px;height:8px;margin-right:6px;\"></span>';",
+                  "",
+                  "  return `",
+                  "    <tr style=\"border-bottom:1px solid #f0f0f0;\">",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};white-space:nowrap;\">${unreadDot}${escapeHtml(msg.from)}</td>",
+                  "      <td style=\"padding:10px 8px;font-weight:${fontWeight};\">${escapeHtml(msg.subject)}</td>",
+                  "      <td style=\"padding:10px 8px;color:#555;font-size:12px;\">${escapeHtml(msg.snippet ? msg.snippet.substring(0, 80) + '…' : '')}</td>",
+                  "      <td style=\"padding:10px 8px;white-space:nowrap;\">${labels}</td>",
+                  "      <td style=\"padding:10px 8px;color:#888;font-size:12px;white-space:nowrap;\">${date}</td>",
+                  "    </tr>`;",
+                  "}).join('');",
+                  "",
+                  "function escapeHtml(str) {",
+                  "  return String(str || '')",
+                  "    .replace(/&#39;/g, \"'\")",
+                  "    .replace(/&amp;/g, '&')",
+                  "    .replace(/</g, '<')",
+                  "    .replace(/>/g, '>')",
+                  "    .replace(/\"/g, '\"');",
+                  "}",
+                  "",
+                  "const cursorBadge = nextCursor",
+                  "  ? `<div style=\"margin-top:12px;padding:8px 12px;background:#fff8e1;border-left:4px solid #f9a825;font-size:12px;color:#555;\">",
+                  "       <strong>Next cursor:</strong> <code style=\"font-size:11px;\">${nextCursor}</code>",
+                  "     </div>`",
+                  "  : `<div style=\"margin-top:12px;padding:8px 12px;background:#e8f5e9;border-left:4px solid #43a047;font-size:12px;color:#555;\">No more pages — this is the last page.</div>`;",
+                  "",
+                  "const html = `",
+                  "<style>",
+                  "  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 16px; background: #fff; }",
+                  "  table { width: 100%; border-collapse: collapse; font-size: 13px; }",
+                  "  th { text-align: left; padding: 8px; background: #f8f9fa; color: #444; font-weight: 600; border-bottom: 2px solid #e0e0e0; }",
+                  "  tr:hover { background: #f5f5f5; }",
+                  "</style>",
+                  "<h3 style=\"margin:0 0 12px;color:#202124;\">📬 Messages <span style=\"font-size:13px;font-weight:normal;color:#888;\">(${messages.length} shown)</span></h3>",
+                  "<table>",
+                  "  <thead>",
+                  "    <tr>",
+                  "      <th>From</th>",
+                  "      <th>Subject</th>",
+                  "      <th>Snippet</th>",
+                  "      <th>Labels</th>",
+                  "      <th>Date</th>",
+                  "    </tr>",
+                  "  </thead>",
+                  "  <tbody>",
+                  "    ${rows || '<tr><td colspan=\"5\" style=\"padding:20px;text-align:center;color:#888;\">No messages found.</td></tr>'}",
+                  "  </tbody>",
+                  "</table>",
+                  "${cursorBadge}",
+                  "`;",
+                  "",
+                  "pm.visualizer.set(html);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "0028b67b-a4be-4d73-9da2-07e5a73c01d0",
+          "name": "Happy path — filter by status (sent)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages?status=sent&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "sent"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "`status=sent` returns only sent messages. Unknown status values are ignored (no error). **200 OK**."
           },
           "event": [
             {
@@ -3808,6 +4053,1245 @@
               ]
             },
             "description": "Thread ID that exists in Gmail but has no messages synced for this user.\n\nExpected response: **404** — `THREAD_NOT_FOUND`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4.12 Attachment Upload",
+      "description": "`POST /api/v1/attachments` — begin an OUTBOUND upload (CONTRACT.md §4.12). Returns a short-lived signed Storage URL the client PUTs bytes to directly (bypasses the ~4.5 MB function-body limit; up to 25 MB).\n\n`GET /api/v1/attachments` — download a received-mail attachment. Returns a signed `downloadUrl` rather than the bytes. Query: `messageId`, `attachmentId`, optional `filename`/`mimeType`.\n\nBoth require `Authorization: Bearer {{jwt}}`.",
+      "item": [
+        {
+          "id": "deb6aeb7-4fc4-4c83-aa51-7243d8c89fa4",
+          "name": "POST Happy path — request signed upload URL",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/attachments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "attachments"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"filename\": \"report.pdf\",\n  \"size\": 1048576\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Begins an outbound upload. **201 Created** — `{ attachmentId, uploadUrl }`. PUT the file bytes to `uploadUrl`, then reference `attachmentId` in `attachmentIds` on `POST /api/v1/messages`."
+          }
+        },
+        {
+          "id": "7f254f4b-99d9-45d7-820a-50da69198e08",
+          "name": "POST MISSING_FIELDS — filename absent",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/attachments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "attachments"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"size\": 1024\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "**400** — `MISSING_FIELDS`."
+          }
+        },
+        {
+          "id": "371bf7b1-2923-4027-aebc-322f6e0eb4d7",
+          "name": "POST FILE_TOO_LARGE — size exceeds 25 MB",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/attachments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "attachments"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"filename\": \"huge.zip\",\n  \"size\": 30000000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Declared `size` > 26214400. **413** — `FILE_TOO_LARGE`."
+          }
+        },
+        {
+          "id": "32c88cc0-4b65-4f5d-b98d-66cc87d33d9d",
+          "name": "POST UNAUTHORIZED — missing Authorization header",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/attachments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "attachments"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"filename\": \"report.pdf\",\n  \"size\": 1024\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "**401** — `UNAUTHORIZED`."
+          }
+        },
+        {
+          "id": "43fe28bb-f8f4-4c9f-8e2c-cf2a6a775d76",
+          "name": "GET Happy path — download received attachment",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/attachments?messageId={{messageId}}&attachmentId={{attachmentId}}&filename=report.pdf&mimeType=application/pdf",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "attachments"
+              ],
+              "query": [
+                {
+                  "key": "messageId",
+                  "value": "{{messageId}}",
+                  "description": "Gmail message id holding the attachment."
+                },
+                {
+                  "key": "attachmentId",
+                  "value": "{{attachmentId}}",
+                  "description": "The part's body.attachmentId (from a message's attachments[])."
+                },
+                {
+                  "key": "filename",
+                  "value": "report.pdf"
+                },
+                {
+                  "key": "mimeType",
+                  "value": "application/pdf"
+                }
+              ]
+            },
+            "description": "**200 OK** — `{ downloadUrl, filename, mimeType, size }`. Fetch `downloadUrl` to get the bytes."
+          }
+        },
+        {
+          "id": "c8c76111-f7f6-47b2-b94e-8f42ec16567f",
+          "name": "GET MISSING_FIELDS — messageId absent",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/attachments?attachmentId={{attachmentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "attachments"
+              ],
+              "query": [
+                {
+                  "key": "attachmentId",
+                  "value": "{{attachmentId}}"
+                }
+              ]
+            },
+            "description": "**400** — `MISSING_FIELDS`."
+          }
+        },
+        {
+          "id": "c381f47c-340f-4e99-9d29-36e1d9fbccd1",
+          "name": "GET ATTACHMENT_NOT_FOUND — unknown attachment",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/attachments?messageId={{messageId}}&attachmentId=does_not_exist",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "attachments"
+              ],
+              "query": [
+                {
+                  "key": "messageId",
+                  "value": "{{messageId}}"
+                },
+                {
+                  "key": "attachmentId",
+                  "value": "does_not_exist"
+                }
+              ]
+            },
+            "description": "Gmail returns no such attachment. **404** — `ATTACHMENT_NOT_FOUND`."
+          }
+        },
+        {
+          "id": "e6856081-3da8-48cd-ba14-aa5b8b76183b",
+          "name": "GET UNAUTHORIZED — missing Authorization header",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/attachments?messageId={{messageId}}&attachmentId={{attachmentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "attachments"
+              ],
+              "query": [
+                {
+                  "key": "messageId",
+                  "value": "{{messageId}}"
+                },
+                {
+                  "key": "attachmentId",
+                  "value": "{{attachmentId}}"
+                }
+              ]
+            },
+            "description": "**401** — `UNAUTHORIZED`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4.13 Message Get",
+      "description": "`GET /api/v1/messages/:id` — fetch a single message by its Gmail message id (`gmailId`), read from the synced Supabase row (no Gmail call).\n\nRequires `Authorization: Bearer {{jwt}}`. `:id` is the `gmailId` (a hex string), NOT the Supabase row UUID.",
+      "item": [
+        {
+          "id": "4ba5ac1d-0bcb-4d60-8414-32015d89fa7d",
+          "name": "Happy path — fetch a single message",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}",
+                  "description": "Gmail message id from messages[].gmailId in a list response."
+                }
+              ]
+            },
+            "description": "**200 OK** — `{ message: Message }` (full §3 shape)."
+          }
+        },
+        {
+          "id": "58842160-bb4f-4367-abb4-c4701a95ad5a",
+          "name": "UNAUTHORIZED — missing Authorization header",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}"
+                }
+              ]
+            },
+            "description": "**401** — `UNAUTHORIZED`."
+          }
+        },
+        {
+          "id": "ab138a99-aa13-4ddc-9e87-853cbbeb5dc8",
+          "name": "MESSAGE_NOT_FOUND — non-existent message id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "does_not_exist_xyz"
+                }
+              ]
+            },
+            "description": "**404** — `MESSAGE_NOT_FOUND`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4.14 Message Delete",
+      "description": "`DELETE /api/v1/messages/:id` — hard-delete a non-draft message: ensures it is in Gmail Trash (where Gmail auto-purges after 30 days) and drops the synced Supabase row. The configured scope is `gmail.modify` (no `mail.google.com`), so true Gmail permanent delete is not available. Already-trashed rows skip the redundant Gmail call.\n\nDrafts are refused here — use `DELETE /api/v1/drafts/:id`.",
+      "item": [
+        {
+          "id": "7d933994-8e07-442a-bc99-51c85065bcd7",
+          "name": "Happy path — delete a non-draft message (204)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}",
+                  "description": "A non-draft message id. Tip: trash it first, then delete."
+                }
+              ]
+            },
+            "description": "**204 No Content** — Gmail-trashed (if not already) and the row removed."
+          }
+        },
+        {
+          "id": "b39d4605-4235-4297-9c68-54ef485a25eb",
+          "name": "UNAUTHORIZED — missing Authorization header",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}"
+                }
+              ]
+            },
+            "description": "**401** — `UNAUTHORIZED`."
+          }
+        },
+        {
+          "id": "4a010684-0b7f-4ba7-9bb3-612eeb18eb48",
+          "name": "MESSAGE_NOT_FOUND — non-existent message id",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "does_not_exist_xyz"
+                }
+              ]
+            },
+            "description": "**404** — `MESSAGE_NOT_FOUND`."
+          }
+        },
+        {
+          "id": "7edaeb2d-fb1e-4d49-9b44-e7685fd9876c",
+          "name": "MESSAGE_IS_DRAFT — id refers to a draft",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{draftMessageId}}",
+                  "description": "A draft message id — must be deleted via DELETE /api/v1/drafts/:id instead."
+                }
+              ]
+            },
+            "description": "Refuses drafts so they are never orphaned in Gmail. **409** — `MESSAGE_IS_DRAFT`."
+          }
+        },
+        {
+          "id": "ba0ead88-0634-47bd-9161-ad657445d802",
+          "name": "MESSAGE_DELETE_FAILED — Gmail trash non-2xx (documented)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}"
+                }
+              ]
+            },
+            "description": "When the message is not already trashed and Gmail `messages.trash` returns a non-2xx, the row is left intact. **502** — `MESSAGE_DELETE_FAILED`. (Hard to trigger manually — documented for completeness.)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "4.15 Message Labels",
+      "description": "`POST /api/v1/messages/:id/labels` — add a label · `DELETE /api/v1/messages/:id/labels` — remove a label.\n\nBody: `{ \"labelId\": \"...\" }`. Modifies the Gmail label via `messages.modify` and writes `label_ids` + derived `status`/`isRead`/`isStarred` back to Supabase.\n\nLabels that PATCH owns (UNREAD, STARRED, INBOX, SENT, DRAFT, TRASH) are refused (400) — use `PATCH /api/v1/messages/:id`. Note: Gmail `CATEGORY_*` labels are mutually exclusive, so adding one removes the other.",
+      "item": [
+        {
+          "id": "fc2decde-5c68-4723-ba7a-d5365e986258",
+          "name": "POST Happy path — add a label",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id/labels",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id",
+                "labels"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"labelId\": \"{{labelId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "**200 OK** — `{ message: Message }` with the label added."
+          }
+        },
+        {
+          "id": "f4256e10-1e36-41d6-a4e9-249219020042",
+          "name": "DELETE Happy path — remove a label",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id/labels",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id",
+                "labels"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"labelId\": \"{{labelId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "**200 OK** — `{ message: Message }` with the label removed."
+          }
+        },
+        {
+          "id": "cc6dd25b-0bbf-48c8-9df1-ae6236ca2378",
+          "name": "POST INVALID_BODY — labelId missing",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id/labels",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id",
+                "labels"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "**400** — `INVALID_BODY`."
+          }
+        },
+        {
+          "id": "2b053ba8-24ba-490b-9fd5-ff4ea1f5d083",
+          "name": "POST INVALID_BODY — protected (PATCH-owned) label",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id/labels",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id",
+                "labels"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"labelId\": \"STARRED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "STARRED/UNREAD/INBOX/SENT/DRAFT/TRASH are refused. **400** — `INVALID_BODY`."
+          }
+        },
+        {
+          "id": "3f7a1c8a-4ad8-4ebb-9218-461ef8976248",
+          "name": "POST UNAUTHORIZED — missing Authorization header",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id/labels",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id",
+                "labels"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"labelId\": \"{{labelId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "**401** — `UNAUTHORIZED`."
+          }
+        },
+        {
+          "id": "216ddf99-a8e9-4f82-b6ff-a9523fd4a3f4",
+          "name": "POST MESSAGE_NOT_FOUND — non-existent message id",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id/labels",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id",
+                "labels"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "does_not_exist_xyz"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"labelId\": \"{{labelId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "**404** — `MESSAGE_NOT_FOUND`."
+          }
+        },
+        {
+          "id": "8dc5ed7b-4b69-4fad-9a9e-758ebed23309",
+          "name": "POST ALREADY_IN_STATE — label already present",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id/labels",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id",
+                "labels"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"labelId\": \"{{labelId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Adding a label the message already has (or removing one it lacks). **409** — `ALREADY_IN_STATE`."
+          }
+        },
+        {
+          "id": "b80b0161-e92c-4487-900f-3e26f3002c62",
+          "name": "POST GMAIL_MODIFY_FAILED — Gmail modify non-2xx (documented)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages/:id/labels",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages",
+                ":id",
+                "labels"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{messageId}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"labelId\": \"{{labelId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Gmail `messages.modify` returns a non-2xx. **502** — `GMAIL_MODIFY_FAILED`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4.16 Labels",
+      "description": "`GET /api/v1/labels` — the Gmail label catalog (system + user) with per-label message/thread totals and unread counts, plus color. Drives the sidebar folder badges and label chips.\n\nRequires `Authorization: Bearer {{jwt}}`.",
+      "item": [
+        {
+          "id": "e1096e56-0312-4361-96c8-bab609190f51",
+          "name": "Happy path — list labels with counts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/labels",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "labels"
+              ]
+            },
+            "description": "**200 OK** — `{ labels: [{ id, name, type, messagesTotal, messagesUnread, threadsTotal, threadsUnread, color }] }`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const labels = (pm.response.json().labels) || [];",
+                  "const rows = labels.map(l => `",
+                  "  <tr style=\"border-bottom:1px solid #f0f0f0;\">",
+                  "    <td style=\"padding:8px;font-family:monospace;\">${l.id}</td>",
+                  "    <td style=\"padding:8px;\">${l.name}</td>",
+                  "    <td style=\"padding:8px;color:#888;\">${l.type}</td>",
+                  "    <td style=\"padding:8px;text-align:right;\">${l.messagesTotal}</td>",
+                  "    <td style=\"padding:8px;text-align:right;font-weight:${l.messagesUnread?'bold':'normal'};color:${l.messagesUnread?'#1a73e8':'#888'};\">${l.messagesUnread}</td>",
+                  "  </tr>`).join('');",
+                  "const html = `<style>body{font-family:-apple-system,sans-serif;padding:16px;}table{width:100%;border-collapse:collapse;font-size:13px;}th{text-align:left;padding:8px;background:#f8f9fa;border-bottom:2px solid #e0e0e0;}</style>",
+                  "<h3>🏷️ Labels <span style=\"font-weight:normal;color:#888;font-size:13px;\">(${labels.length})</span></h3>",
+                  "<table><thead><tr><th>ID</th><th>Name</th><th>Type</th><th style=\"text-align:right;\">Total</th><th style=\"text-align:right;\">Unread</th></tr></thead><tbody>${rows}</tbody></table>`;",
+                  "pm.visualizer.set(html);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "3887a1e6-30f6-4f2e-80f4-461b792cc7ba",
+          "name": "UNAUTHORIZED — missing Authorization header",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/labels",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "labels"
+              ]
+            },
+            "description": "**401** — `UNAUTHORIZED`."
+          }
+        },
+        {
+          "id": "ac4d3206-d8d0-4dec-809f-18ec9046f7ab",
+          "name": "GMAIL_RATE_LIMITED — Gmail API 429 (documented)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/labels",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "labels"
+              ]
+            },
+            "description": "Gmail returns 429 while reading labels. **429** — `GMAIL_RATE_LIMITED`."
+          }
+        },
+        {
+          "id": "c4236c13-3107-45a8-afd9-e622484e9243",
+          "name": "GMAIL_LABELS_FAILED — Gmail API non-2xx (documented)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/labels",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "labels"
+              ]
+            },
+            "description": "Any other Gmail failure on labels.list/labels.get. **502** — `GMAIL_LABELS_FAILED`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4.17 OAuth Initiation",
+      "description": "`GET /api/v1/auth/google` — generates the Google consent URL and **302-redirects** the browser to it. Unauthenticated. Open this in a browser to start the OAuth flow; after consent, the §4.1 callback issues the JWT.",
+      "item": [
+        {
+          "id": "7a224e13-befd-4727-9912-fbe53275b011",
+          "name": "Happy path — redirect to Google consent",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/google",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "google"
+              ]
+            },
+            "description": "**302 Found** — `Location: https://accounts.google.com/o/oauth2/...` (access_type=offline, prompt=consent). Disable 'Automatically follow redirects' in Postman settings to inspect the Location header."
+          }
+        },
+        {
+          "id": "1bc71969-9f55-428b-8d6b-5310afa1919d",
+          "name": "405 — non-GET method",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/google",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "google"
+              ]
+            },
+            "description": "**405** — `METHOD_NOT_ALLOWED`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4.18 Pub/Sub Webhook",
+      "description": "`POST /webhook/gmail` — receives Gmail push notifications from Google Pub/Sub. **Not** under `/api/v1` and does **not** use a JWT; it validates the `?token=` query param against `GOOGLE_PUBSUB_VERIFICATION_TOKEN`. Always acks 200 (after processing) so Pub/Sub retries only on crash.\n\nSet the `pubsubToken` collection variable to your `GOOGLE_PUBSUB_VERIFICATION_TOKEN`. The body is the standard Pub/Sub push envelope; `message.data` is base64 `{ emailAddress, historyId }`.",
+      "item": [
+        {
+          "id": "8ee42783-ff38-45e8-b997-89d84bae79a0",
+          "name": "Happy path — Pub/Sub push envelope",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/webhook/gmail?token={{pubsubToken}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "webhook",
+                "gmail"
+              ],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{pubsubToken}}",
+                  "description": "GOOGLE_PUBSUB_VERIFICATION_TOKEN"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": {\n    \"data\": \"eyJlbWFpbEFkZHJlc3MiOiJ1c2VyQGV4YW1wbGUuY29tIiwiaGlzdG9yeUlkIjoxMjM0NX0=\",\n    \"messageId\": \"pubsub-msg-001\",\n    \"publishTime\": \"2026-01-01T00:00:00.000Z\"\n  },\n  \"subscription\": \"projects/your-project/subscriptions/vibemail-sub\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Processes the history delta, then acks. **200 OK** (empty body)."
+          }
+        },
+        {
+          "id": "20bd2727-ce97-42f4-9461-bafa41d11328",
+          "name": "405 — non-POST method",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/webhook/gmail",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "webhook",
+                "gmail"
+              ]
+            },
+            "description": "**405** — `METHOD_NOT_ALLOWED`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4.19 Cron — Renew Watch",
+      "description": "`GET /api/cron/renew-watch` — Vercel Cron job (daily 06:00 UTC) that renews Gmail push-notification watches within 24h of expiry. Vercel sends `Authorization: Bearer <CRON_SECRET>`; the handler checks it only when `CRON_SECRET` is set (so local dev without the secret works).\n\nSet the `cronSecret` collection variable to your `CRON_SECRET`.",
+      "item": [
+        {
+          "id": "77c13b4e-938e-4b99-bae3-e52ae49270be",
+          "name": "Happy path — run the renewal batch",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cronSecret}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/cron/renew-watch",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cron",
+                "renew-watch"
+              ]
+            },
+            "description": "**200 OK** — `{ renewed: number, failed: number }`."
+          }
+        },
+        {
+          "id": "ac479879-5896-4855-930b-427b8e8d6b15",
+          "name": "UNAUTHORIZED — wrong/missing cron secret",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/cron/renew-watch",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cron",
+                "renew-watch"
+              ]
+            },
+            "description": "When `CRON_SECRET` is set and the Bearer token doesn't match. **401** — `UNAUTHORIZED`."
+          }
+        },
+        {
+          "id": "b83a9546-d925-40c4-b314-eff53e2ca6c7",
+          "name": "405 — non-GET method",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cronSecret}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/cron/renew-watch",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cron",
+                "renew-watch"
+              ]
+            },
+            "description": "**405** — `METHOD_NOT_ALLOWED`."
           }
         }
       ]
