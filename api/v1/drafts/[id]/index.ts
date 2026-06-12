@@ -5,6 +5,7 @@ import { verifyJwt } from '../../../../src/middleware/jwt';
 import { errorResponse, handleError } from '../../../../src/middleware/error';
 import { ProviderError } from '../../../../src/types/provider';
 import { loadOAuth2Client } from '../../../../src/providers/gmail/auth';
+import { resolveDraftId } from '../../../../src/providers/gmail/drafts';
 import { rowToMessage, DbMessageRow } from '../../../../src/sync/normalize';
 
 /**
@@ -74,10 +75,6 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse): Promise<vo
 
     const row = data as DbMessageRow & { draft_id: string | null };
 
-    if (!row.draft_id) {
-      throw new ProviderError('DRAFT_NOT_FOUND', `Message "${id}" exists but has no draftId — it may not be a draft`);
-    }
-
     // ── Build the updated RFC 2822 message ────────────────────────────────
     const newTo      = hasTo      ? (to      as string) : row.to_address;
     const newSubject = hasSubject ? (subject as string) : row.subject;
@@ -85,6 +82,13 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse): Promise<vo
 
     const auth  = await loadOAuth2Client(payload.sub);
     const gmail = google.gmail({ version: 'v1', auth });
+
+    // Prefer the persisted draft_id; fall back to a live lookup for drafts that
+    // were synced via the webhook and never had draft_id written.
+    const draftId = row.draft_id ?? await resolveDraftId(gmail, row.gmail_id);
+    if (!draftId) {
+      throw new ProviderError('DRAFT_NOT_FOUND', `Could not resolve a Gmail draft id for message "${id}"`);
+    }
 
     const { data: profile } = await gmail.users.getProfile({ userId: 'me' });
     const from = profile.emailAddress ?? row.from_address;
@@ -100,7 +104,7 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse): Promise<vo
     try {
       const { data: updatedDraft } = await gmail.users.drafts.update({
         userId:  'me',
-        id:      row.draft_id,
+        id:      draftId,
         requestBody: {
           message: { raw },
         },
@@ -120,6 +124,9 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse): Promise<vo
       to_address: newTo,
       subject:    newSubject,
       body_plain: newBody,
+      // Self-heal: persist the resolved draft id so a webhook-synced draft
+      // (which had draft_id = null) stops needing the live Gmail lookup.
+      draft_id:   draftId,
     };
 
     const { error: updateError } = await supabase
@@ -181,18 +188,22 @@ async function handleDelete(req: VercelRequest, res: VercelResponse): Promise<vo
 
     const row = data as { gmail_id: string; draft_id: string | null };
 
-    if (!row.draft_id) {
-      throw new ProviderError('DRAFT_NOT_FOUND', `Message "${id}" has no draftId — it may not be a draft`);
-    }
-
-    // ── Delete from Gmail first ───────────────────────────────────────────
+    // ── Resolve the Gmail draft id ────────────────────────────────────────
+    // Prefer the persisted draft_id, but fall back to a live Gmail lookup for
+    // drafts synced via the webhook (which never had draft_id written).
     const auth  = await loadOAuth2Client(payload.sub);
     const gmail = google.gmail({ version: 'v1', auth });
 
+    const draftId = row.draft_id ?? await resolveDraftId(gmail, row.gmail_id);
+    if (!draftId) {
+      throw new ProviderError('DRAFT_NOT_FOUND', `Could not resolve a Gmail draft id for message "${id}"`);
+    }
+
+    // ── Delete from Gmail first ───────────────────────────────────────────
     try {
       await gmail.users.drafts.delete({
         userId: 'me',
-        id:     row.draft_id,
+        id:     draftId,
       });
     } catch (err) {
       throw new ProviderError('GMAIL_DRAFT_FAILED', 'Gmail drafts.delete failed', err);

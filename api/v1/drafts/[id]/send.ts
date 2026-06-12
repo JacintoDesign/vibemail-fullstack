@@ -5,6 +5,7 @@ import { verifyJwt } from '../../../../src/middleware/jwt';
 import { errorResponse, handleError } from '../../../../src/middleware/error';
 import { ProviderError } from '../../../../src/types/provider';
 import { loadOAuth2Client } from '../../../../src/providers/gmail/auth';
+import { resolveDraftId } from '../../../../src/providers/gmail/drafts';
 import { normalizeMessage, rowToMessage, DbMessageRow } from '../../../../src/sync/normalize';
 
 /**
@@ -56,20 +57,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
     const row = data as DbMessageRow & { draft_id: string | null };
 
-    if (!row.draft_id) {
-      throw new ProviderError('DRAFT_NOT_FOUND', `Message "${id}" has no draftId — it may not be a draft`);
-    }
-
     // ── Send the draft via Gmail ──────────────────────────────────────────
     const auth  = await loadOAuth2Client(payload.sub);
     const gmail = google.gmail({ version: 'v1', auth });
+
+    // Prefer the persisted draft_id; fall back to a live lookup for drafts that
+    // were synced via the webhook and never had draft_id written.
+    const draftId = row.draft_id ?? await resolveDraftId(gmail, row.gmail_id);
+    if (!draftId) {
+      throw new ProviderError('DRAFT_NOT_FOUND', `Could not resolve a Gmail draft id for message "${id}"`);
+    }
 
     let sentGmailId: string;
 
     try {
       const { data: sent } = await gmail.users.drafts.send({
         userId:      'me',
-        requestBody: { id: row.draft_id },
+        requestBody: { id: draftId },
       });
 
       if (!sent.id) {

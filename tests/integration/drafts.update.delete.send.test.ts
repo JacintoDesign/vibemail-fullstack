@@ -39,6 +39,7 @@ import { google } from 'googleapis';
 const mockDraftsUpdate    = jest.fn();
 const mockDraftsDelete    = jest.fn();
 const mockDraftsSend      = jest.fn();
+const mockDraftsList      = jest.fn();
 const mockMessagesGet     = jest.fn();
 const mockUsersGetProfile = jest.fn();
 
@@ -80,6 +81,7 @@ beforeEach(() => {
   mockDraftsUpdate.mockResolvedValue({ data: {} });
   mockDraftsDelete.mockResolvedValue({ data: {} });
   mockDraftsSend.mockResolvedValue({ data: { id: FAKE_SENT_ID } });
+  mockDraftsList.mockResolvedValue({ data: { drafts: [] } });
   mockMessagesGet.mockResolvedValue({ data: FAKE_FULL_SENT_MSG });
 
   (google.gmail as jest.Mock).mockReturnValue({
@@ -90,6 +92,7 @@ beforeEach(() => {
         update: mockDraftsUpdate,
         delete: mockDraftsDelete,
         send:   mockDraftsSend,
+        list:   mockDraftsList,
       },
     },
   });
@@ -307,6 +310,44 @@ describe('DELETE /api/v1/drafts/:id', () => {
     );
     // Gmail delete must have been called.
     expect(callOrder[0]).toBe('gmail');
+  });
+
+  it('204 — resolves draftId via drafts.list when draft_id is null (webhook-synced draft)', async () => {
+    // A draft that reached Supabase via the webhook has draft_id = null.
+    const resolvedDraftId = `resolved_${Date.now()}`;
+    const msg = await seedMessage(testUserId, { label_ids: ['DRAFT'], status: 'draft', draft_id: null });
+    mockDraftsList.mockResolvedValue({
+      data: { drafts: [{ id: resolvedDraftId, message: { id: msg.gmail_id } }] },
+    });
+
+    const { state, res } = mockRes();
+    await updateDeleteHandler(
+      mockReq({ method: 'DELETE', headers: { authorization: authHeader }, query: { id: msg.gmail_id } }),
+      res,
+    );
+
+    expect(state.statusCode).toBe(204);
+    // It must have looked the draft id up and deleted with the resolved value.
+    expect(mockDraftsList).toHaveBeenCalled();
+    expect(mockDraftsDelete).toHaveBeenCalledWith(expect.objectContaining({ id: resolvedDraftId }));
+
+    const { data } = await getTestClient().from('messages').select('gmail_id').eq('gmail_id', msg.gmail_id).maybeSingle();
+    expect(data).toBeNull();
+  });
+
+  it('404 DRAFT_NOT_FOUND — draft_id null and no matching Gmail draft', async () => {
+    const msg = await seedMessage(testUserId, { label_ids: ['DRAFT'], status: 'draft', draft_id: null });
+    mockDraftsList.mockResolvedValue({ data: { drafts: [] } }); // no match
+
+    const { state, res } = mockRes();
+    await updateDeleteHandler(
+      mockReq({ method: 'DELETE', headers: { authorization: authHeader }, query: { id: msg.gmail_id } }),
+      res,
+    );
+
+    expect(state.statusCode).toBe(404);
+    expect((state.body as { error: { code: string } }).error.code).toBe('DRAFT_NOT_FOUND');
+    expect(mockDraftsDelete).not.toHaveBeenCalled();
   });
 });
 
