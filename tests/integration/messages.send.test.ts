@@ -183,7 +183,7 @@ describe('POST /api/v1/messages', () => {
     );
   });
 
-  it('400 MISSING_FIELDS — body is absent', async () => {
+  it('201 — body is absent (optional)', async () => {
     const { state, res } = mockRes();
     await handler(
       mockReq({
@@ -193,8 +193,28 @@ describe('POST /api/v1/messages', () => {
       }),
       res,
     );
-    expect(state.statusCode).toBe(400);
-    expect((state.body as { error: { code: string } }).error.code).toBe('MISSING_FIELDS');
+    expect(state.statusCode).toBe(201);
+    expect(mockSendMessage).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ body: '' }),
+    );
+  });
+
+  it('201 — both subject and body absent (only to required)', async () => {
+    const { state, res } = mockRes();
+    await handler(
+      mockReq({
+        method:  'POST',
+        headers: { authorization: AUTH_HEADER },
+        body:    { to: 'r@example.com' },
+      }),
+      res,
+    );
+    expect(state.statusCode).toBe(201);
+    expect(mockSendMessage).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ subject: '', body: '' }),
+    );
   });
 
   it('400 MISSING_FIELDS — to is an empty string', async () => {

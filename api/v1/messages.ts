@@ -112,22 +112,20 @@ async function handleSend(req: VercelRequest, res: VercelResponse): Promise<void
   const body = req.body as Record<string, unknown>;
   const { to, subject, body: msgBody, threadId, attachmentIds } = body ?? {};
 
-  // Subject is optional — an empty/absent subject is allowed (Gmail shows
-  // "(no subject)"). Default it to an empty string. Only `to` and `body` are
-  // required.
+  // Subject and body are optional — an empty/absent subject sends as
+  // "(no subject)", and an empty body is allowed too (both match Gmail).
+  // Default them to empty strings. Only `to` is required.
   const subjectStr = subject === undefined || subject === null ? '' : subject;
+  const bodyStr    = msgBody === undefined || msgBody === null ? '' : msgBody;
 
-  // Validate required fields.
-  if (!to || !msgBody) {
-    errorResponse(
-      res, 400, 'MISSING_FIELDS',
-      'Request body must include to and body',
-    );
+  // Validate the only required field.
+  if (!to) {
+    errorResponse(res, 400, 'MISSING_FIELDS', 'Request body must include to');
     return;
   }
 
-  if (typeof to !== 'string' || typeof msgBody !== 'string' || typeof subjectStr !== 'string') {
-    errorResponse(res, 400, 'MISSING_FIELDS', 'to and body must be strings; subject, if present, must be a string');
+  if (typeof to !== 'string' || typeof bodyStr !== 'string' || typeof subjectStr !== 'string') {
+    errorResponse(res, 400, 'MISSING_FIELDS', 'to must be a string; subject and body, if present, must be strings');
     return;
   }
 
@@ -137,8 +135,8 @@ async function handleSend(req: VercelRequest, res: VercelResponse): Promise<void
     return;
   }
 
-  if (to.trim() === '' || msgBody.trim() === '') {
-    errorResponse(res, 400, 'MISSING_FIELDS', 'to and body must not be empty strings');
+  if (to.trim() === '') {
+    errorResponse(res, 400, 'MISSING_FIELDS', 'to must not be an empty string');
     return;
   }
 
@@ -156,7 +154,7 @@ async function handleSend(req: VercelRequest, res: VercelResponse): Promise<void
     const message = await sendMessage(payload.sub, {
       to,
       subject: subjectStr,
-      body: msgBody,
+      body: bodyStr,
       threadId: typeof threadId === 'string' ? threadId : undefined,
       attachmentIds: ids,
     });

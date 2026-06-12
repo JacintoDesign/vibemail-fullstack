@@ -399,9 +399,10 @@ export function ComposeDrawer({
       .filter((a) => a.status === "done" && a.attachmentId)
       .map((a) => a.attachmentId as string),
   });
-  // Subject is optional — like Gmail, an empty subject is allowed (it sends as
-  // "(no subject)"). Only a recipient and a message body are required.
-  const isValid = (): boolean => !!effectiveTo() && !!body.trim();
+  // Subject and body are both optional — like Gmail, you can send with an empty
+  // subject (it shows "(no subject)") and an empty body. Only a recipient is
+  // required.
+  const isValid = (): boolean => !!effectiveTo();
 
   const send = async () => {
     setActionError(null);
@@ -548,7 +549,7 @@ export function ComposeDrawer({
             </Banner>
           ) : null}
           {validationError ? (
-            <Banner tone="error">Add at least one recipient and a message.</Banner>
+            <Banner tone="error">Add at least one recipient.</Banner>
           ) : null}
 
           {/* To field */}

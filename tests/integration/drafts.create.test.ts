@@ -148,14 +148,24 @@ describe('POST /api/v1/drafts', () => {
     expect(mockDraftsCreate).toHaveBeenCalled();
   });
 
-  it('400 MISSING_FIELDS — body absent', async () => {
+  it('201 — body absent (optional)', async () => {
     const { state, res } = mockRes();
     await handler(
       mockReq({ method: 'POST', headers: { authorization: authHeader }, body: { to: 'r@example.com', subject: 'S' } }),
       res,
     );
-    expect(state.statusCode).toBe(400);
-    expect((state.body as { error: { code: string } }).error.code).toBe('MISSING_FIELDS');
+    expect(state.statusCode).toBe(201);
+    expect(mockDraftsCreate).toHaveBeenCalled();
+  });
+
+  it('201 — both subject and body absent (only to required)', async () => {
+    const { state, res } = mockRes();
+    await handler(
+      mockReq({ method: 'POST', headers: { authorization: authHeader }, body: { to: 'r@example.com' } }),
+      res,
+    );
+    expect(state.statusCode).toBe(201);
+    expect(mockDraftsCreate).toHaveBeenCalled();
   });
 
   it('201 — subject is empty string (allowed)', async () => {

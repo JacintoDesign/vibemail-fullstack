@@ -35,21 +35,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   const body = req.body as Record<string, unknown> ?? {};
   const { to, subject, body: msgBody, threadId } = body;
 
-  // Subject is optional — an empty/absent subject is allowed (Gmail shows
-  // "(no subject)"). Default it to an empty string. Only `to` and `body` are
-  // required.
+  // Subject and body are optional — an empty/absent subject sends as
+  // "(no subject)", and an empty body is allowed too (both match Gmail).
+  // Default them to empty strings. Only `to` is required.
   const subjectStr = subject === undefined || subject === null ? '' : subject;
+  const bodyStr    = msgBody === undefined || msgBody === null ? '' : msgBody;
 
-  if (!to || !msgBody) {
-    errorResponse(res, 400, 'MISSING_FIELDS', 'Request body must include to and body');
+  if (!to) {
+    errorResponse(res, 400, 'MISSING_FIELDS', 'Request body must include to');
     return;
   }
-  if (typeof to !== 'string' || typeof msgBody !== 'string' || typeof subjectStr !== 'string') {
-    errorResponse(res, 400, 'MISSING_FIELDS', 'to and body must be strings; subject, if present, must be a string');
+  if (typeof to !== 'string' || typeof bodyStr !== 'string' || typeof subjectStr !== 'string') {
+    errorResponse(res, 400, 'MISSING_FIELDS', 'to must be a string; subject and body, if present, must be strings');
     return;
   }
-  if (to.trim() === '' || msgBody.trim() === '') {
-    errorResponse(res, 400, 'MISSING_FIELDS', 'to and body must not be empty strings');
+  if (to.trim() === '') {
+    errorResponse(res, 400, 'MISSING_FIELDS', 'to must not be an empty string');
     return;
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
@@ -69,7 +70,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
 
     // Build RFC 2822 raw message.
-    const raw = buildRaw(from, { to, subject: subjectStr, body: msgBody });
+    const raw = buildRaw(from, { to, subject: subjectStr, body: bodyStr });
 
     // Create the draft via Gmail drafts API.
     let draftId:   string;
