@@ -66,6 +66,8 @@ export interface SidebarProps {
   onCompose: () => void;
   onToggleRail: () => void;
   labels: Label[];
+  /** Per-label unread counts, keyed by the label name in `labels`. */
+  labelCounts?: Record<string, number>;
   theme: Theme;
   onToggleTheme: () => void;
   density: Density;
@@ -479,6 +481,7 @@ export function Sidebar({
   onCompose,
   onToggleRail,
   labels,
+  labelCounts,
   theme,
   onToggleTheme,
   density,
@@ -653,6 +656,7 @@ export function Sidebar({
               rail={rail}
               key={l}
               label={l}
+              count={labelCounts?.[l]}
               active={active === "label:" + l}
               onClick={() => onSelect("label:" + l)}
               renderIcon={(color) => <LabelIcon label={l} size={16} color={color} />}

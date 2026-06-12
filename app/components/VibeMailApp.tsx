@@ -21,7 +21,9 @@ import {
   createDraft,
   deleteDraft as apiDeleteDraft,
   deleteMessage as apiDeleteMessage,
+  type GmailLabel,
   labelToId,
+  listLabels,
   patchMessage,
   removeMessageLabel,
   sendDraft,
@@ -159,6 +161,10 @@ export function VibeMailApp() {
   // does the folder/label filtering and cursor pagination server-side.
   const [messages, setMessages] = useState<Message[]>([]);
   const labels = DEFAULT_LABELS;
+  // Mailbox-wide label counts (Inbox unread, Drafts total, per-category unread)
+  // from GET /api/v1/labels — the source of truth for the sidebar badges, which
+  // otherwise would only reflect the currently-loaded page.
+  const [labelData, setLabelData] = useState<GmailLabel[] | null>(null);
   // Read once on mount so SSR and first client render agree (avoids hydration mismatch).
   const [accountEmail] = useState(() => getAccount());
 
@@ -289,14 +295,51 @@ export function VibeMailApp() {
   // state across keystrokes.
   const gPendingRef = useRef(false);
 
+  // Fetch the mailbox-wide label counts on mount and whenever the folder
+  // changes (a cheap way to pick up reads/archives/sends since the last view).
+  // Failures are non-fatal — the badges just fall back to the loaded page.
+  useEffect(() => {
+    let cancelled = false;
+    listLabels()
+      .then(({ labels: ls }) => { if (!cancelled) setLabelData(ls); })
+      .catch(() => { /* transient — keep the previous counts */ });
+    return () => { cancelled = true; };
+  }, [filter]);
+
+  const labelById = useMemo(() => {
+    const m: Record<string, GmailLabel> = {};
+    (labelData ?? []).forEach((l) => { m[l.id] = l; });
+    return m;
+  }, [labelData]);
+
+  // Folder badges. Prefer the authoritative Gmail counts; fall back to the
+  // currently-loaded page before the first /labels response lands.
   const counts = useMemo(
-    () => ({
-      inbox: messages.filter((m) => m.status === "inbox" && !m.isRead).length,
-      starred: messages.filter((m) => m.isStarred && m.status !== "trash").length,
-      drafts: messages.filter((m) => m.status === "draft").length,
-    }),
-    [messages],
+    () =>
+      labelData
+        ? {
+            inbox: labelById.INBOX?.messagesUnread ?? 0,
+            starred: labelById.STARRED?.messagesTotal ?? 0,
+            drafts: labelById.DRAFT?.messagesTotal ?? 0,
+          }
+        : {
+            inbox: messages.filter((m) => m.status === "inbox" && !m.isRead).length,
+            starred: messages.filter((m) => m.isStarred && m.status !== "trash").length,
+            drafts: messages.filter((m) => m.status === "draft").length,
+          },
+    [labelData, labelById, messages],
   );
+
+  // Per-category unread counts for the sidebar's Labels section, keyed by the
+  // friendly chip name the Sidebar renders (e.g. "Social" → CATEGORY_SOCIAL).
+  const labelCounts = useMemo(() => {
+    const out: Record<string, number> = {};
+    labels.forEach((name) => {
+      const l = labelById[labelToId(name)];
+      if (l) out[name] = l.messagesUnread;
+    });
+    return out;
+  }, [labels, labelById]);
 
   const baseVisible = useMemo(() => {
     // Search results arrive already filtered (and trash-excluded) from the
@@ -998,6 +1041,7 @@ export function VibeMailApp() {
               counts={counts}
               accountEmail={accountEmail}
               labels={labels}
+              labelCounts={labelCounts}
               rail={false}
               width={270}
               mobile
@@ -1061,6 +1105,7 @@ export function VibeMailApp() {
         counts={counts}
         accountEmail={accountEmail}
         labels={labels}
+        labelCounts={labelCounts}
         rail={layout.sidebarRail}
         width={layout.sidebarW}
         onSelect={selectFolder}
