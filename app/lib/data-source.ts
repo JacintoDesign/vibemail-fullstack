@@ -7,9 +7,8 @@ import {
   getThread,
   labelToId,
   listMessages,
-  parseSender,
   searchMessages,
-  timeLabel,
+  threadMsgOf,
   toUiMessage,
 } from "./api";
 import type { Label, Message, ThreadMsg } from "./types";
@@ -75,16 +74,5 @@ export async function fetchSearch(q: string, cursor?: string): Promise<MessagePa
 /** Load a full thread (oldest-first) as renderable thread cards. */
 export async function loadThread(threadId: string): Promise<ThreadMsg[]> {
   const { messages } = await getThread(threadId);
-  return messages.map((api) => {
-    const { name, email } = parseSender(api.from);
-    return {
-      from: name,
-      email,
-      date: timeLabel(api.date),
-      body: api.bodyPlain ?? "",
-      bodyHtml: api.bodyHtml,
-      gmailId: api.gmailId,
-      attachments: api.attachments ?? [],
-    };
-  });
+  return messages.map(threadMsgOf);
 }

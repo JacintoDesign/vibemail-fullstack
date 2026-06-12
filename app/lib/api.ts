@@ -112,7 +112,14 @@ export function userLabels(labelIds: string[]): string[] {
 
 // ── Mapper: wire Message → UI Message ────────────────────────────────────────
 
-function threadMsgOf(api: ApiMessage): ThreadMsg {
+/**
+ * Map one wire `ApiMessage` to a renderable `ThreadMsg`. The single source of
+ * truth for this conversion — used both for the synthetic single-message thread
+ * on a list row (`toUiMessage`) and for the full thread fetch (`loadThread` in
+ * data-source). Keep all `ApiMessage → ThreadMsg` mapping here so a new field
+ * can't be added to one path and forgotten in the other.
+ */
+export function threadMsgOf(api: ApiMessage): ThreadMsg {
   const { name, email } = parseSender(api.from);
   return {
     from: name,
