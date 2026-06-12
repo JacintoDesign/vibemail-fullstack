@@ -229,6 +229,8 @@ function SettingsPanel({
   onShowShortcuts,
   anchorRef,
   panelRef,
+  mobile,
+  onClose,
 }: Pick<
   SidebarProps,
   | "theme"
@@ -247,6 +249,8 @@ function SettingsPanel({
 > & {
   anchorRef: React.RefObject<HTMLButtonElement | null>;
   panelRef: React.RefObject<HTMLDivElement | null>;
+  mobile?: boolean;
+  onClose: () => void;
 }) {
   const { signOut } = useAuth();
   const [signOutHover, setSignOutHover] = useState(false);
@@ -265,7 +269,19 @@ function SettingsPanel({
   if (!pos) return createPortal(<div ref={panelRef} />, document.body);
 
   return createPortal(
-    <div
+    <>
+      {/* On mobile the panel floats over the full-width nav with no backdrop, so
+          taps outside it (and touch ghost-clicks) fall through to the nav
+          buttons underneath. A full-screen scrim below the panel captures those
+          taps — closing the panel instead of triggering the nav. */}
+      {mobile ? (
+        <div
+          aria-hidden
+          onClick={onClose}
+          style={{ position: "fixed", inset: 0, zIndex: 9998, background: "transparent" }}
+        />
+      ) : null}
+      <div
       ref={panelRef}
       style={{
         position: "fixed",
@@ -468,7 +484,8 @@ function SettingsPanel({
           <span>Sign out</span>
         </button>
       </div>
-    </div>,
+      </div>
+    </>,
     document.body,
   );
 }
@@ -702,6 +719,8 @@ export function Sidebar({
               onShowShortcuts={onShowShortcuts}
               anchorRef={gearRef}
               panelRef={panelRef}
+              mobile={mobile}
+              onClose={() => setSettingsOpen(false)}
             />
           )}
           <button
