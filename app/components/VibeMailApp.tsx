@@ -396,25 +396,59 @@ export function VibeMailApp() {
             if (pendingPatchRef.current.has(m.id)) return m; // in-flight optimistic — leave it
             const srv = byId.get(m.id);
             if (!srv) return m; // not in this page (older, or other folder)
-            if (
-              srv.isRead === m.isRead &&
-              srv.isStarred === m.isStarred &&
-              srv.status === m.status &&
-              sameLabelSet(srv.labelIds, m.labelIds)
-            ) {
+
+            const flagsChanged =
+              srv.isRead !== m.isRead ||
+              srv.isStarred !== m.isStarred ||
+              srv.status !== m.status ||
+              !sameLabelSet(srv.labelIds, m.labelIds);
+
+            // A draft's subject/recipients/body can be edited (in this client or
+            // elsewhere), so surface those without a manual refresh. drafts.update
+            // also reassigns the Gmail message id, so gmailId itself can move —
+            // reconcile it too or later draft actions would hit a stale id.
+            const isDraft = srv.status === "draft" || m.status === "draft";
+            const draftEdited =
+              isDraft &&
+              (srv.gmailId !== m.gmailId ||
+                srv.subject !== m.subject ||
+                srv.to !== m.to ||
+                srv.snippet !== m.snippet ||
+                (srv.bodyPlain ?? "") !== (m.bodyPlain ?? "") ||
+                (srv.bodyHtml ?? null) !== (m.bodyHtml ?? null));
+
+            if (!flagsChanged && !draftEdited) {
               return m; // nothing changed — keep the identity to avoid a re-render
             }
             changed = true;
+
             // Reconcile only the server-derived flags; keep UI-only state such as
             // an already-expanded `thread` from loadThread.
-            return {
-              ...m,
-              isRead: srv.isRead,
-              isStarred: srv.isStarred,
-              status: srv.status,
-              labelIds: srv.labelIds,
-              labels: srv.labels,
-            };
+            const next = { ...m };
+            if (flagsChanged) {
+              next.isRead = srv.isRead;
+              next.isStarred = srv.isStarred;
+              next.status = srv.status;
+              next.labelIds = srv.labelIds;
+              next.labels = srv.labels;
+            }
+            if (draftEdited) {
+              // A draft only ever renders as a single card (it opens in the
+              // compose drawer, never the multi-message reader), so replacing its
+              // content fields and single-card thread can't clobber an expanded
+              // thread loaded by loadThread.
+              next.gmailId = srv.gmailId;
+              next.draftId = srv.draftId;
+              next.to = srv.to;
+              next.subject = srv.subject;
+              next.snippet = srv.snippet;
+              next.bodyPlain = srv.bodyPlain;
+              next.bodyHtml = srv.bodyHtml;
+              next.date = srv.date;
+              next.time = srv.time;
+              next.thread = srv.thread;
+            }
+            return next;
           });
           if (!fresh.length && !changed) return ms;
           return fresh.length ? [...fresh, ...reconciled] : reconciled;
