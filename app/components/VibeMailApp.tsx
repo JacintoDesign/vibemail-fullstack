@@ -33,11 +33,13 @@ import {
   userLabels,
 } from "@/lib/api";
 import {
+  backfillOlderInbox,
   DEFAULT_LABELS,
   fetchFolder,
   fetchSearch,
   getAccount,
   loadThread,
+  reconcileInboxLabels,
 } from "@/lib/data-source";
 import type { CSSVars, Message } from "@/lib/types";
 import { useSettings } from "@/providers/SettingsProvider";
@@ -180,6 +182,23 @@ export function VibeMailApp() {
   const [error, setError] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  // Backfill state for the inbox "Load more". endCursor lets us resume paging
+  // after a backfill inserts older rows; backfillCursor resumes the Gmail walk;
+  // backfillExhausted is set once the server reports the cap/mailbox is reached.
+  const [endCursor, setEndCursor] = useState<string | null>(null);
+  const [backfillCursor, setBackfillCursor] = useState<string | null>(null);
+  const [backfillExhausted, setBackfillExhausted] = useState(false);
+  // The inbox size reported by Gmail's /labels (messagesTotal). A cached count
+  // that can run a few ahead of reality (stale labels) until reconcile runs.
+  const inboxTotal = useMemo(
+    () => (labelData ?? []).find((l) => l.id === "INBOX")?.messagesTotal ?? null,
+    [labelData],
+  );
+  // The authoritative live inbox size from reconcileInbox (messages.list yield),
+  // available after the reconcile pass runs. Preferred over inboxTotal once set.
+  const [inboxLiveCount, setInboxLiveCount] = useState<number | null>(null);
+  // The sync target: live count when known, else the cached /labels total.
+  const inboxTarget = inboxLiveCount ?? inboxTotal;
 
   const [composeOpen, setComposeOpen] = useState(false);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
@@ -203,10 +222,15 @@ export function VibeMailApp() {
       if (reqIdRef.current !== myId) return; // a newer request superseded this
       setMessages(page.messages);
       setNextCursor(page.nextCursor);
+      setEndCursor(page.endCursor);
+      // Reset the older-history backfill walk for the freshly loaded view.
+      setBackfillCursor(null);
+      setBackfillExhausted(false);
     } catch (e) {
       if (reqIdRef.current !== myId) return;
       setMessages([]);
       setNextCursor(null);
+      setEndCursor(null);
       setError(errMessage(e));
     } finally {
       if (reqIdRef.current === myId) setLoading(false);
@@ -230,21 +254,104 @@ export function VibeMailApp() {
     loadFirstPage();
   }, [filter, searchMode, query, loadFirstPage]);
 
+  // The inbox can pull older history from Gmail once its local rows run out;
+  // other folders and search only page what's already synced.
+  const canBackfill = !searchMode && filter === "all" && !backfillExhausted;
+  // Once the loaded count reaches the real inbox size there's nothing left.
+  const reachedInboxTotal = inboxTarget !== null && messages.length >= inboxTarget;
+  // Keep "Load more" visible while either DB rows or backfillable history remain.
+  const canLoadMore = !!nextCursor || (canBackfill && !reachedInboxTotal);
+
   const loadMore = useCallback(async () => {
-    if (!nextCursor || loadingMore) return;
+    if (loadingMore) return;
+
+    // Fast path: more rows are already in the DB.
+    if (nextCursor) {
+      setLoadingMore(true);
+      try {
+        const page = searchMode
+          ? await fetchSearch(query.trim(), nextCursor)
+          : await fetchFolder(filter, nextCursor);
+        setMessages((ms) => [...ms, ...page.messages]);
+        setNextCursor(page.nextCursor);
+        setEndCursor(page.endCursor);
+      } catch (e) {
+        setError(errMessage(e));
+      } finally {
+        setLoadingMore(false);
+      }
+      return;
+    }
+
+    // DB exhausted: for the inbox, backfill the next batch of older history
+    // from Gmail, then read the newly-synced rows starting just past the
+    // oldest one currently shown (endCursor) and append them.
+    if (!canBackfill || !endCursor) return;
     setLoadingMore(true);
     try {
-      const page = searchMode
-        ? await fetchSearch(query.trim(), nextCursor)
-        : await fetchFolder(filter, nextCursor);
-      setMessages((ms) => [...ms, ...page.messages]);
-      setNextCursor(page.nextCursor);
+      // Cap the run at the real inbox size so a full sync terminates naturally.
+      const result = await backfillOlderInbox(backfillCursor ?? undefined, inboxTarget ?? undefined);
+      setBackfillCursor(result.nextCursor);
+      if (result.done) setBackfillExhausted(true);
+
+      if (result.syncedThisCall > 0) {
+        const page = await fetchFolder(filter, endCursor);
+        setMessages((ms) => [...ms, ...page.messages]);
+        setNextCursor(page.nextCursor);
+        if (page.endCursor) setEndCursor(page.endCursor);
+      }
     } catch (e) {
       setError(errMessage(e));
     } finally {
       setLoadingMore(false);
     }
-  }, [nextCursor, loadingMore, searchMode, query, filter]);
+  }, [nextCursor, loadingMore, searchMode, query, filter, canBackfill, endCursor, backfillCursor, inboxTarget]);
+
+  // ── Background auto-sync: fill the inbox up to its true size ────────────────
+  // While viewing the inbox, keep pulling the next page (DB rows first, then
+  // older history from Gmail) until the loaded count reaches Gmail's
+  // messagesTotal. Each loadMore() settles state and re-runs this effect, so the
+  // batches chain automatically. Once the DB holds the whole inbox this only
+  // pages local rows — no redundant Gmail calls on later visits. Stops on folder
+  // switch, search, the backfill cap, or when the target is reached.
+  useEffect(() => {
+    if (searchMode || filter !== "all") return;
+    if (loading || loadingMore) return;
+    if (backfillExhausted) return;
+    if (inboxTarget === null || messages.length >= inboxTarget) return;
+    loadMore();
+  }, [
+    searchMode, filter, loading, loadingMore, backfillExhausted,
+    messages.length, nextCursor, backfillCursor, inboxTarget, loadMore,
+  ]);
+
+  // ── Reconcile: drop stale INBOX labels so the count matches Gmail ───────────
+  // The append-side sync never learns a message was archived after we stored it.
+  // On entering the inbox, run a one-shot reconcile: it strips the INBOX label
+  // from anything Gmail no longer lists as inbox and returns the authoritative
+  // live count (which then becomes the sync target). Removed rows are spliced
+  // out locally so the list updates without a reload. Re-armed on folder switch
+  // and manual refresh (resetReconcile).
+  const reconciledRef = useRef(false);
+  useEffect(() => {
+    if (filter !== "all" || searchMode) { reconciledRef.current = false; return; }
+    if (loading || reconciledRef.current) return;
+    reconciledRef.current = true;
+    const myId = reqIdRef.current;
+    (async () => {
+      try {
+        const r = await reconcileInboxLabels();
+        if (reqIdRef.current !== myId) return; // folder/search changed mid-flight
+        setInboxLiveCount(r.inboxCount);
+        if (r.removedGmailIds.length) {
+          const gone = new Set(r.removedGmailIds);
+          setMessages((ms) => ms.filter((m) => !gone.has(m.gmailId)));
+        }
+      } catch {
+        reconciledRef.current = false; // transient — let it retry on next settle
+      }
+    })();
+  }, [filter, searchMode, loading]);
 
   // ── Live inbox: poll for newly-inserted messages ──────────────────────────
   // There is no browser Supabase client (the only client is server-side and
@@ -648,6 +755,7 @@ export function VibeMailApp() {
 
   const onRefresh = () => {
     setRefreshing(true);
+    reconciledRef.current = false; // re-run the stale-label reconcile on refresh
     loadFirstPage().finally(() => setRefreshing(false));
   };
   const onRetry = () => {
@@ -1116,7 +1224,7 @@ export function VibeMailApp() {
             emptyHint={filter === "all" ? "New mail will appear here in real time." : null}
             onRefresh={onRefresh}
             onCollapse={() => {}}
-            serverHasMore={!!nextCursor}
+            serverHasMore={canLoadMore}
             onLoadMore={loadMore}
             loadingMore={loadingMore}
           />
@@ -1256,7 +1364,7 @@ export function VibeMailApp() {
             labelOptions={labels}
             onAddLabel={addLabelToMessage}
             onRemoveLabel={removeLabelFromMessage}
-            serverHasMore={!!nextCursor}
+            serverHasMore={canLoadMore}
             onLoadMore={loadMore}
             loadingMore={loadingMore}
           />

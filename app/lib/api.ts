@@ -34,6 +34,24 @@ export interface ApiMessage {
 export interface MessagePage {
   messages: ApiMessage[];
   nextCursor: string | null;
+  // Keyset of the last returned row, present even when nextCursor is null, so
+  // the client can resume paging after a backfill inserts older rows.
+  endCursor?: string | null;
+}
+
+/** Result of one POST /api/v1/sync/backfill batch. */
+export interface BackfillResult {
+  synced: number;          // cumulative across this backfill run
+  syncedThisCall: number;  // rows synced by this single call
+  done: boolean;           // cap reached or mailbox exhausted
+  nextCursor: string | null;
+}
+
+/** Result of POST /api/v1/sync/reconcile — stale INBOX labels dropped. */
+export interface ReconcileResult {
+  inboxCount: number;          // Gmail's authoritative live inbox size
+  removed: number;             // rows that left the inbox this call
+  removedGmailIds: string[];   // their gmailIds, for client-side splicing
 }
 
 /** The PATCH /messages/:id response is a partial — only the mutated flags. */
@@ -180,6 +198,26 @@ export function listMessages(opts: {
   return apiFetch<MessagePage>(
     `/messages${qs({ cursor: opts.cursor, limit: opts.limit, labelId: opts.labelId, status: opts.status })}`,
   );
+}
+
+/**
+ * POST /api/v1/sync/backfill — pull one batch of older INBOX history from Gmail
+ * into the DB. Resumable: pass back the returned cursor to fetch the next batch,
+ * up to the server-enforced cap, until `done` is true.
+ */
+export function backfillInbox(opts: { max?: number; cursor?: string } = {}): Promise<BackfillResult> {
+  return apiFetch(`/sync/backfill`, {
+    method: "POST",
+    body: JSON.stringify({ max: opts.max, cursor: opts.cursor }),
+  });
+}
+
+/**
+ * POST /api/v1/sync/reconcile — drop stale INBOX labels so the inbox count
+ * converges to Gmail's (removes archived/trashed/deleted mail from the inbox).
+ */
+export function reconcileInbox(): Promise<ReconcileResult> {
+  return apiFetch(`/sync/reconcile`, { method: "POST" });
 }
 
 /** GET /api/v1/messages/:id — fetch a single message by gmailId. */

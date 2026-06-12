@@ -4,18 +4,46 @@
 
 import { getAccountEmail } from "./auth";
 import {
+  backfillInbox,
   getThread,
   labelToId,
   listMessages,
+  reconcileInbox,
   searchMessages,
   threadMsgOf,
   toUiMessage,
 } from "./api";
+import type { BackfillResult, ReconcileResult } from "./api";
 import type { Label, Message, ThreadMsg } from "./types";
 
 export interface MessagePage {
   messages: Message[];
   nextCursor: string | null;
+  // Keyset of the last loaded row; lets the caller resume paging after a
+  // backfill adds older rows even once nextCursor has gone null.
+  endCursor: string | null;
+}
+
+// Fallback cap when the true inbox size isn't known yet (no /labels response).
+const BACKFILL_MAX = 500;
+
+/**
+ * Pull the next batch of older inbox history from Gmail into the DB. Drives the
+ * inbox "Load more" / background auto-sync once the locally-paged rows run out.
+ * `cursor` resumes a prior run; omit it to start fresh. `max` bounds the whole
+ * run — pass the real inbox total so a full auto-sync terminates naturally.
+ */
+export function backfillOlderInbox(cursor?: string, max: number = BACKFILL_MAX): Promise<BackfillResult> {
+  return backfillInbox({ max, cursor });
+}
+
+/**
+ * Reconcile the locally-stored inbox against Gmail's live inbox: drops the
+ * INBOX label from mail that has since been archived/trashed/deleted, so the
+ * inbox count matches Gmail. Returns the live count and the gmailIds removed.
+ */
+export function reconcileInboxLabels(): Promise<ReconcileResult> {
+  return reconcileInbox();
 }
 
 // The sidebar label list. No label-name endpoint exists in CONTRACT.md, so the
@@ -59,7 +87,7 @@ export async function fetchFolder(folder: string, cursor?: string): Promise<Mess
   const status = folder === "archived" ? "archived" : undefined;
   const page = await listMessages({ labelId, status, cursor, limit: 50 });
   const messages = page.messages.map(toUiMessage);
-  return { messages, nextCursor: page.nextCursor };
+  return { messages, nextCursor: page.nextCursor, endCursor: page.endCursor ?? null };
 }
 
 /** Fetch one server page of search results, mapped to UI messages. */
@@ -68,6 +96,7 @@ export async function fetchSearch(q: string, cursor?: string): Promise<MessagePa
   return {
     messages: page.messages.filter((m) => m.status !== "trash").map(toUiMessage),
     nextCursor: page.nextCursor,
+    endCursor: page.endCursor ?? null,
   };
 }
 

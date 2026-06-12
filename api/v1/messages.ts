@@ -85,14 +85,16 @@ async function handleList(req: VercelRequest, res: VercelResponse): Promise<void
     const page = hasMore ? rows.slice(0, limit) : rows;
     const messages = page.map(rowToMessage);
 
-    const nextCursor = hasMore
-      ? Buffer.from(JSON.stringify({
-          d: page[page.length - 1].created_at,
-          g: page[page.length - 1].gmail_id,
-        })).toString('base64')
+    // endCursor is the keyset of the LAST returned row, emitted even when there
+    // are no further DB rows (nextCursor === null). The client uses it to resume
+    // paging after an out-of-band backfill inserts older rows past the end.
+    const lastRow = page[page.length - 1];
+    const endCursor = lastRow
+      ? Buffer.from(JSON.stringify({ d: lastRow.created_at, g: lastRow.gmail_id })).toString('base64')
       : null;
+    const nextCursor = hasMore ? endCursor : null;
 
-    res.status(200).json({ messages, nextCursor });
+    res.status(200).json({ messages, nextCursor, endCursor });
   } catch (err) {
     handleError(res, err);
   }

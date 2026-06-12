@@ -98,6 +98,50 @@ export async function upsertMessage(
   }
 }
 
+// ── Inbox reconciliation helpers ──────────────────────────────────────────────
+
+/**
+ * Returns the gmail_id + label_ids of every row this user currently has tagged
+ * with the INBOX label. Used by reconcileInbox to find rows that Gmail no longer
+ * considers inbox (archived/trashed/deleted) so the stale label can be dropped.
+ */
+export async function getInboxMessageRows(
+  userId: string,
+): Promise<Array<{ gmail_id: string; label_ids: string[] }>> {
+  const { data, error } = await getClient()
+    .from('messages')
+    .select('gmail_id, label_ids')
+    .eq('user_id', userId)
+    .contains('label_ids', ['INBOX']);
+
+  if (error) {
+    throw new ProviderError('SYNC_UPSERT_FAILED', error.message, error);
+  }
+  return (data ?? []).map((r) => ({ gmail_id: r.gmail_id, label_ids: r.label_ids ?? [] }));
+}
+
+/**
+ * Overwrites a single message's label_ids and derived status. Used to drop a
+ * stale INBOX label during reconciliation. The caller computes the new status
+ * from the new labels (the db layer holds no status-derivation logic).
+ */
+export async function updateMessageLabels(
+  userId:   string,
+  gmailId:  string,
+  labelIds: string[],
+  status:   string,
+): Promise<void> {
+  const { error } = await getClient()
+    .from('messages')
+    .update({ label_ids: labelIds, status })
+    .eq('user_id', userId)
+    .eq('gmail_id', gmailId);
+
+  if (error) {
+    throw new ProviderError('SYNC_UPSERT_FAILED', error.message, error);
+  }
+}
+
 // ── getUser ───────────────────────────────────────────────────────────────────
 
 /**
