@@ -152,6 +152,43 @@ describe('GET /api/v1/messages', () => {
     expect(messages.every(m => m.labelIds.includes('SENT'))).toBe(true);
   });
 
+  it('200 — filters by status, only returning rows with that derived status', async () => {
+    const archUser = await seedUser();
+    const archHeader = `Bearer ${signJwt({ sub: archUser.id, email: archUser.email, name: 'Test User' })}`;
+    await seedMessage(archUser.id, { label_ids: ['INBOX'], status: 'inbox' });
+    await seedMessage(archUser.id, { label_ids: [], status: 'archived' });
+    await seedMessage(archUser.id, { label_ids: [], status: 'archived' });
+
+    const { state, res } = mockRes();
+    await handler(
+      mockReq({
+        method: 'GET',
+        headers: { authorization: archHeader },
+        query: { status: 'archived' },
+      }),
+      res,
+    );
+    expect(state.statusCode).toBe(200);
+    const { messages } = state.body as { messages: { status: string }[] };
+    expect(messages.length).toBe(2);
+    expect(messages.every(m => m.status === 'archived')).toBe(true);
+    await cleanupUser(archUser.id);
+  });
+
+  it('200 — ignores an unknown status value (no filter applied)', async () => {
+    const { state, res } = mockRes();
+    await handler(
+      mockReq({
+        method: 'GET',
+        headers: { authorization: authHeader },
+        query: { status: 'not_a_real_status' },
+      }),
+      res,
+    );
+    expect(state.statusCode).toBe(200);
+    expect((state.body as { messages: unknown[] }).messages.length).toBeGreaterThanOrEqual(1);
+  });
+
   it('200 — nextCursor is null on the last page', async () => {
     // Request more messages than exist
     const { state, res } = mockRes();

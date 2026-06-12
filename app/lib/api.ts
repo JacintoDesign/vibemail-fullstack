@@ -170,14 +170,15 @@ function qs(params: Record<string, string | number | undefined>): string {
   return parts.length ? `?${parts.join("&")}` : "";
 }
 
-/** GET /api/v1/messages — paginated list, optionally filtered by labelId. */
+/** GET /api/v1/messages — paginated list, optionally filtered by labelId or status. */
 export function listMessages(opts: {
   cursor?: string;
   limit?: number;
   labelId?: string;
+  status?: MessageStatus;
 } = {}): Promise<MessagePage> {
   return apiFetch<MessagePage>(
-    `/messages${qs({ cursor: opts.cursor, limit: opts.limit, labelId: opts.labelId })}`,
+    `/messages${qs({ cursor: opts.cursor, limit: opts.limit, labelId: opts.labelId, status: opts.status })}`,
   );
 }
 

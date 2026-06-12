@@ -29,7 +29,7 @@ async function handleList(req: VercelRequest, res: VercelResponse): Promise<void
     return;
   }
 
-  const { cursor, limit: limitParam, labelId } = req.query;
+  const { cursor, limit: limitParam, labelId, status } = req.query;
 
   // Validate limit
   const limit = limitParam === undefined ? 20 : Number(limitParam);
@@ -63,6 +63,15 @@ async function handleList(req: VercelRequest, res: VercelResponse): Promise<void
     // Filter by label if provided.
     if (labelId && typeof labelId === 'string') {
       query = query.contains('label_ids', [labelId]);
+    }
+
+    // Filter by derived status if provided. This is the only way to page the
+    // "archived" folder server-side — archived is the absence of INBOX/SENT/
+    // DRAFT/TRASH and so cannot be expressed as a single labelId `contains`.
+    // Unknown values are ignored rather than 422'd (no contract error for it).
+    const STATUSES = ['inbox', 'sent', 'draft', 'archived', 'trash'];
+    if (typeof status === 'string' && STATUSES.includes(status)) {
+      query = query.eq('status', status);
     }
 
     const { data, error } = await query;

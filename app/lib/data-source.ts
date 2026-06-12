@@ -42,8 +42,8 @@ function folderLabelId(folder: string): string | undefined {
       return "TRASH";
     case "archived":
       // No single Gmail label marks "archived" (it is the absence of INBOX/
-      // SENT/DRAFT/TRASH), so it cannot be server-filtered by labelId — the
-      // caller filters the returned page by status instead.
+      // SENT/DRAFT/TRASH), so it is server-filtered by the `status` param
+      // instead of a labelId — see fetchFolder.
       return undefined;
     default:
       if (folder.startsWith("label:")) return labelToId(folder.slice(6));
@@ -54,11 +54,11 @@ function folderLabelId(folder: string): string | undefined {
 /** Fetch one server page for a folder, mapped to UI messages. */
 export async function fetchFolder(folder: string, cursor?: string): Promise<MessagePage> {
   const labelId = folderLabelId(folder);
-  const page = await listMessages({ labelId, cursor, limit: 50 });
-  let messages = page.messages.map(toUiMessage);
-  if (folder === "archived") {
-    messages = messages.filter((m) => m.status === "archived");
-  }
+  // Archive has no labelId — page it server-side by its derived status so it
+  // isn't limited to whatever archived rows happen to fall in the first page.
+  const status = folder === "archived" ? "archived" : undefined;
+  const page = await listMessages({ labelId, status, cursor, limit: 50 });
+  const messages = page.messages.map(toUiMessage);
   return { messages, nextCursor: page.nextCursor };
 }
 
