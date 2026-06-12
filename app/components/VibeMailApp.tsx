@@ -346,7 +346,13 @@ export function VibeMailApp() {
     // server; the folder views keep a light status filter so optimistic status
     // changes (archive/trash) drop a row out of the current folder immediately.
     if (searchMode) return messages;
-    if (filter === "all") return messages.filter((m) => m.status === "inbox");
+    // Inbox membership is a question about the INBOX *label*, not the derived
+    // `status` — a self-sent message carries both INBOX and SENT labels, and
+    // deriveStatus ranks SENT above INBOX (CONTRACT §3), so status="sent" would
+    // wrongly hide it here. Filtering on the label shows it in both Inbox and
+    // Sent (matching Gmail) while still dropping rows whose INBOX label was
+    // optimistically removed by archive/trash.
+    if (filter === "all") return messages.filter((m) => (m.labelIds || []).includes("INBOX") && m.status !== "trash");
     if (filter === "starred") return messages.filter((m) => m.isStarred && m.status !== "trash");
     if (filter === "sent") return messages.filter((m) => m.status === "sent");
     if (filter === "drafts") return messages.filter((m) => m.status === "draft");
@@ -354,7 +360,10 @@ export function VibeMailApp() {
     if (filter === "trash") return messages.filter((m) => m.status === "trash");
     if (filter.startsWith("label:")) {
       const l = filter.slice(6);
-      return messages.filter((m) => m.status === "inbox" && (m.labels || []).includes(l));
+      // Same reasoning as the Inbox view above: scope to INBOX-label membership,
+      // not status==="inbox", so a self-sent (INBOX+SENT) message tagged with
+      // this user label isn't hidden by deriveStatus ranking SENT over INBOX.
+      return messages.filter((m) => (m.labelIds || []).includes("INBOX") && m.status !== "trash" && (m.labels || []).includes(l));
     }
     return [];
   }, [messages, filter, searchMode, query]);
