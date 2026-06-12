@@ -5,7 +5,7 @@ import { verifyJwt } from '../../../../src/middleware/jwt';
 import { errorResponse, handleError } from '../../../../src/middleware/error';
 import { ProviderError } from '../../../../src/types/provider';
 import { loadOAuth2Client } from '../../../../src/providers/gmail/auth';
-import { resolveDraftId } from '../../../../src/providers/gmail/drafts';
+import { resolveDraftId, isGmailNotFound } from '../../../../src/providers/gmail/drafts';
 import { rowToMessage, DbMessageRow } from '../../../../src/sync/normalize';
 
 /**
@@ -112,6 +112,12 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse): Promise<vo
       // drafts.update response always contains the new message ID.
       newGmailMsgId = updatedDraft.message?.id ?? row.gmail_id;
     } catch (err) {
+      // The draft was deleted in Gmail since we synced the row — it can't be
+      // edited. Surface a clean 404 so the client can drop the stale row
+      // (and offer Delete, which force-removes it).
+      if (isGmailNotFound(err)) {
+        throw new ProviderError('DRAFT_NOT_FOUND', `Draft for message "${id}" no longer exists in Gmail`);
+      }
       throw new ProviderError('GMAIL_DRAFT_FAILED', 'Gmail drafts.update failed', err);
     }
 
@@ -190,26 +196,32 @@ async function handleDelete(req: VercelRequest, res: VercelResponse): Promise<vo
 
     // ── Resolve the Gmail draft id ────────────────────────────────────────
     // Prefer the persisted draft_id, but fall back to a live Gmail lookup for
-    // drafts synced via the webhook (which never had draft_id written).
+    // drafts synced via the webhook (which never had draft_id written). A null
+    // result means the draft no longer exists in Gmail — the Supabase row is
+    // orphaned, so we force-delete it below without a Gmail call.
     const auth  = await loadOAuth2Client(payload.sub);
     const gmail = google.gmail({ version: 'v1', auth });
 
     const draftId = row.draft_id ?? await resolveDraftId(gmail, row.gmail_id);
-    if (!draftId) {
-      throw new ProviderError('DRAFT_NOT_FOUND', `Could not resolve a Gmail draft id for message "${id}"`);
+
+    // ── Delete from Gmail (skip if the draft is already gone) ──────────────
+    if (draftId) {
+      try {
+        await gmail.users.drafts.delete({
+          userId: 'me',
+          id:     draftId,
+        });
+      } catch (err) {
+        // A 404 means Gmail already has no such draft — treat it as already
+        // deleted and proceed to clean up our row. Anything else is a real
+        // Gmail failure that should surface (and leave the row for retry).
+        if (!isGmailNotFound(err)) {
+          throw new ProviderError('GMAIL_DRAFT_FAILED', 'Gmail drafts.delete failed', err);
+        }
+      }
     }
 
-    // ── Delete from Gmail first ───────────────────────────────────────────
-    try {
-      await gmail.users.drafts.delete({
-        userId: 'me',
-        id:     draftId,
-      });
-    } catch (err) {
-      throw new ProviderError('GMAIL_DRAFT_FAILED', 'Gmail drafts.delete failed', err);
-    }
-
-    // ── Delete from Supabase (only after Gmail succeeds) ──────────────────
+    // ── Delete the Supabase row (force-removes an orphaned row too) ────────
     // Per CONTRACT.md §4.10: both must succeed. Surface error if Supabase fails.
     const { error: deleteError } = await supabase
       .from('messages')

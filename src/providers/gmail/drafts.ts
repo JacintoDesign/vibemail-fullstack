@@ -32,3 +32,14 @@ export async function resolveDraftId(
   } while (pageToken);
   return null;
 }
+
+/**
+ * True when a thrown Gmail/Gaxios error is an HTTP 404 — i.e. the draft (or
+ * message) no longer exists server-side. Used to treat "already gone in Gmail"
+ * as success when cleaning up an orphaned Supabase row.
+ */
+export function isGmailNotFound(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false;
+  const e = err as { code?: number | string; response?: { status?: number } };
+  return e.code === 404 || e.code === '404' || e.response?.status === 404;
+}

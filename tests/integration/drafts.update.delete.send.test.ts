@@ -197,6 +197,18 @@ describe('PATCH /api/v1/drafts/:id', () => {
     expect((state.body as { error: { code: string } }).error.code).toBe('GMAIL_DRAFT_FAILED');
   });
 
+  it('404 DRAFT_NOT_FOUND — drafts.update 404s (draft gone in Gmail)', async () => {
+    const draft = await seedDraft();
+    mockDraftsUpdate.mockRejectedValue(Object.assign(new Error('Not Found'), { code: 404 }));
+    const { state, res } = mockRes();
+    await updateDeleteHandler(
+      mockReq({ method: 'PATCH', headers: { authorization: authHeader }, query: { id: draft.gmail_id }, body: { subject: 'Updated' } }),
+      res,
+    );
+    expect(state.statusCode).toBe(404);
+    expect((state.body as { error: { code: string } }).error.code).toBe('DRAFT_NOT_FOUND');
+  });
+
   // ── Happy path ────────────────────────────────────────────────────────────
 
   it('200 — updates subject, calls drafts.update with correct draftId', async () => {
@@ -335,7 +347,9 @@ describe('DELETE /api/v1/drafts/:id', () => {
     expect(data).toBeNull();
   });
 
-  it('404 DRAFT_NOT_FOUND — draft_id null and no matching Gmail draft', async () => {
+  it('204 — force-deletes an orphaned row when no Gmail draft matches', async () => {
+    // draft_id null AND drafts.list returns no match → the draft is gone in
+    // Gmail. The stale Supabase row must still be removed (no Gmail call).
     const msg = await seedMessage(testUserId, { label_ids: ['DRAFT'], status: 'draft', draft_id: null });
     mockDraftsList.mockResolvedValue({ data: { drafts: [] } }); // no match
 
@@ -345,9 +359,25 @@ describe('DELETE /api/v1/drafts/:id', () => {
       res,
     );
 
-    expect(state.statusCode).toBe(404);
-    expect((state.body as { error: { code: string } }).error.code).toBe('DRAFT_NOT_FOUND');
+    expect(state.statusCode).toBe(204);
     expect(mockDraftsDelete).not.toHaveBeenCalled();
+    const { data } = await getTestClient().from('messages').select('gmail_id').eq('gmail_id', msg.gmail_id).maybeSingle();
+    expect(data).toBeNull();
+  });
+
+  it('204 — drafts.delete returns 404 (already gone in Gmail); row still removed', async () => {
+    const draft = await seedDraft();
+    mockDraftsDelete.mockRejectedValue(Object.assign(new Error('Not Found'), { code: 404 }));
+
+    const { state, res } = mockRes();
+    await updateDeleteHandler(
+      mockReq({ method: 'DELETE', headers: { authorization: authHeader }, query: { id: draft.gmail_id } }),
+      res,
+    );
+
+    expect(state.statusCode).toBe(204);
+    const { data } = await getTestClient().from('messages').select('gmail_id').eq('gmail_id', draft.gmail_id).maybeSingle();
+    expect(data).toBeNull();
   });
 });
 

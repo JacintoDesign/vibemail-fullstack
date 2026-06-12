@@ -717,27 +717,51 @@ export function VibeMailApp() {
   // ── Compose: send / save draft ────────────────────────────────────────────
   // These reject on failure so the ComposeDrawer keeps the form open and shows
   // its in-drawer error banner; on success they close the drawer and refresh.
+  const closeCompose = () => {
+    setComposeOpen(false);
+    setReplyTo(null);
+    setDraft(null);
+  };
+  // A draft can be deleted in Gmail out from under a stale Supabase row; editing
+  // or sending it then 404s as DRAFT_NOT_FOUND. Force-delete the orphaned row
+  // (now possible) so it stops haunting the list, and close out cleanly.
+  const isMissingDraft = (e: unknown) => e instanceof ApiError && e.code === "DRAFT_NOT_FOUND";
+  const discardOrphanDraft = (d: Message) => {
+    apiDeleteDraft(d.gmailId).catch(() => { /* row may already be gone */ });
+    removeByIds([d.id]);
+    closeCompose();
+    showToast("That draft no longer exists in Gmail — removed it.", "error");
+  };
   const handleSend = async (payload: ComposePayload, count: number) => {
     if (draft) {
       // Editing an existing draft → persist edits, then send it via drafts.send.
       // drafts.update assigns a NEW Gmail message id, so send that one.
-      const { message: updated } = await updateDraft(draft.gmailId, payload);
-      await sendDraft(updated.gmailId);
+      try {
+        const { message: updated } = await updateDraft(draft.gmailId, payload);
+        await sendDraft(updated.gmailId);
+      } catch (e) {
+        if (isMissingDraft(e)) return discardOrphanDraft(draft);
+        throw e;
+      }
     } else {
       await sendMessage({ ...payload, threadId: replyTo?.threadId });
     }
-    setComposeOpen(false);
-    setReplyTo(null);
-    setDraft(null);
+    closeCompose();
     showToast(`Message sent to ${count} recipient${count === 1 ? "" : "s"}.`);
     loadFirstPage();
   };
   const handleSaveDraft = async (payload: ComposePayload) => {
-    if (draft) await updateDraft(draft.gmailId, payload);
-    else await createDraft({ ...payload, threadId: replyTo?.threadId });
-    setComposeOpen(false);
-    setReplyTo(null);
-    setDraft(null);
+    if (draft) {
+      try {
+        await updateDraft(draft.gmailId, payload);
+      } catch (e) {
+        if (isMissingDraft(e)) return discardOrphanDraft(draft);
+        throw e;
+      }
+    } else {
+      await createDraft({ ...payload, threadId: replyTo?.threadId });
+    }
+    closeCompose();
     showToast("Draft saved.");
     loadFirstPage();
   };

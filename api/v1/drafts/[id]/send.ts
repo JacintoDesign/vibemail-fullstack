@@ -5,7 +5,7 @@ import { verifyJwt } from '../../../../src/middleware/jwt';
 import { errorResponse, handleError } from '../../../../src/middleware/error';
 import { ProviderError } from '../../../../src/types/provider';
 import { loadOAuth2Client } from '../../../../src/providers/gmail/auth';
-import { resolveDraftId } from '../../../../src/providers/gmail/drafts';
+import { resolveDraftId, isGmailNotFound } from '../../../../src/providers/gmail/drafts';
 import { normalizeMessage, rowToMessage, DbMessageRow } from '../../../../src/sync/normalize';
 
 /**
@@ -83,6 +83,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       sentGmailId = sent.id;
     } catch (err) {
       if (err instanceof ProviderError) throw err;
+      // The draft was deleted in Gmail since we synced the row — it can't be
+      // sent. Surface a clean 404 so the client can drop the stale row.
+      if (isGmailNotFound(err)) {
+        throw new ProviderError('DRAFT_NOT_FOUND', `Draft for message "${id}" no longer exists in Gmail`);
+      }
       throw new ProviderError('GMAIL_DRAFT_FAILED', 'Gmail drafts.send failed', err);
     }
 
