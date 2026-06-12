@@ -7,6 +7,7 @@ import { useState, type CSSProperties } from "react";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { decodeEntities } from "@/lib/text";
 import { GlassPanel, Icon } from "@/components/ds";
+import { useSettings } from "@/providers/SettingsProvider";
 import type { ThreadMsg } from "@/lib/types";
 
 export function MessageCard({
@@ -29,10 +30,15 @@ export function MessageCard({
 }) {
   const hasPlain = !!msg.body;
   const hasHtml = !!msg.bodyHtml;
-  // Per-message view mode. Default to the plain body; fall back to HTML only
-  // when there is no plain text. This state lives on the card instance, so it
-  // resets to the default whenever the thread reader remounts (new thread).
-  const [mode, setMode] = useState<"plain" | "html">(hasPlain ? "plain" : "html");
+  // Global default for the body view, set in Settings.
+  const { bodyView: globalView } = useSettings();
+  // Per-message override of the global default. `null` means "follow the global
+  // setting", so changing the global Plain/HTML option re-syncs every card that
+  // hasn't been toggled by hand. Toggling one card sets its own override only —
+  // it never touches the global setting or any other card. State lives on the
+  // card instance, so the override resets when the thread reader remounts.
+  const [override, setOverride] = useState<"plain" | "html" | null>(null);
+  const mode = override ?? globalView;
   // Clamp the chosen mode to what actually exists, so a disabled option can
   // never end up rendered.
   const view: "plain" | "html" =
@@ -119,7 +125,7 @@ export function MessageCard({
           ) : null}
         </div>
         {expanded && bodyToggle ? (
-          <BodyToggle view={view} hasPlain={hasPlain} hasHtml={hasHtml} onSelect={setMode} />
+          <BodyToggle view={view} hasPlain={hasPlain} hasHtml={hasHtml} onSelect={setOverride} />
         ) : null}
         <span
           className="vm-msg-date-inline"

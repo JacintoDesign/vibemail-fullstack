@@ -842,6 +842,8 @@ export function VibeMailApp() {
     onGlassChange: settings.setGlass,
     animatedBg: settings.animatedBg,
     onAnimatedBgChange: settings.setAnimatedBg,
+    bodyView: settings.bodyView,
+    onBodyViewChange: settings.setBodyView,
   };
 
   const toastEl = toast ? (

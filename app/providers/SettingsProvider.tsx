@@ -18,6 +18,7 @@ import {
 import {
   applyShellVars,
   DEFAULT_SETTINGS,
+  type BodyView,
   type Density,
   type GlassLevel,
   type Settings,
@@ -33,6 +34,8 @@ interface SettingsContextValue {
   fontScale: number;
   /** Effective animated-bg state (raw preference AND not reduced-motion). */
   animatedBg: boolean;
+  /** Global default for the message body view (plain vs rendered HTML). */
+  bodyView: BodyView;
   reducedMotion: boolean;
   toggleTheme: () => void;
   setTheme: (v: Theme) => void;
@@ -40,6 +43,7 @@ interface SettingsContextValue {
   setGlass: (v: GlassLevel) => void;
   setFontScale: (v: number) => void;
   setAnimatedBg: (v: boolean) => void;
+  setBodyView: (v: BodyView) => void;
 }
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
@@ -103,6 +107,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       glass: settings.glass,
       fontScale: settings.fontScale,
       animatedBg: effectiveAnimatedBg,
+      bodyView: settings.bodyView,
       reducedMotion,
       toggleTheme: () => patch({ theme: settings.theme === "light" ? "dark" : "light" }),
       setTheme: (v) => patch({ theme: v }),
@@ -110,6 +115,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setGlass: (v) => patch({ glass: v }),
       setFontScale: (v) => patch({ fontScale: v }),
       setAnimatedBg: (v) => patch({ animatedBg: v }),
+      setBodyView: (v) => patch({ bodyView: v }),
     }),
     [settings, effectiveAnimatedBg, reducedMotion, patch],
   );

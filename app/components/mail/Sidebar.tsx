@@ -15,7 +15,7 @@ import {
 import { createPortal } from "react-dom";
 import { Button, Icon } from "@/components/ds";
 import { useAuth } from "@/providers/AuthProvider";
-import type { Density, GlassLevel, Theme } from "@/lib/shell-vars";
+import type { BodyView, Density, GlassLevel, Theme } from "@/lib/shell-vars";
 import type { Label } from "@/lib/types";
 import { Hamburger } from "./Hamburger";
 
@@ -76,6 +76,8 @@ export interface SidebarProps {
   onGlassChange: (v: GlassLevel) => void;
   animatedBg: boolean;
   onAnimatedBgChange: (v: boolean) => void;
+  bodyView: BodyView;
+  onBodyViewChange: (v: BodyView) => void;
   rail?: boolean;
   width?: number;
   mobile?: boolean;
@@ -220,6 +222,8 @@ function SettingsPanel({
   onGlassChange,
   animatedBg,
   onAnimatedBgChange,
+  bodyView,
+  onBodyViewChange,
   onShowShortcuts,
   anchorRef,
   panelRef,
@@ -235,6 +239,8 @@ function SettingsPanel({
   | "onGlassChange"
   | "animatedBg"
   | "onAnimatedBgChange"
+  | "bodyView"
+  | "onBodyViewChange"
   | "onShowShortcuts"
 > & {
   anchorRef: React.RefObject<HTMLButtonElement | null>;
@@ -308,6 +314,12 @@ function SettingsPanel({
         value={glass}
         options={["low", "medium", "high"]}
         onChange={onGlassChange}
+      />
+      <SegRow<BodyView>
+        label="Email body"
+        value={bodyView}
+        options={["plain", "html"]}
+        onChange={onBodyViewChange}
       />
 
       {/* Font scale */}
@@ -477,6 +489,8 @@ export function Sidebar({
   onGlassChange,
   animatedBg,
   onAnimatedBgChange,
+  bodyView,
+  onBodyViewChange,
   rail,
   width,
   mobile,
@@ -679,6 +693,8 @@ export function Sidebar({
               onGlassChange={onGlassChange}
               animatedBg={animatedBg}
               onAnimatedBgChange={onAnimatedBgChange}
+              bodyView={bodyView}
+              onBodyViewChange={onBodyViewChange}
               onShowShortcuts={onShowShortcuts}
               anchorRef={gearRef}
               panelRef={panelRef}

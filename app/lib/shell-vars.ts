@@ -9,6 +9,7 @@ import type { CSSVars } from "./types";
 export type Theme = "dark" | "light";
 export type Density = "compact" | "default" | "comfy";
 export type GlassLevel = "low" | "medium" | "high";
+export type BodyView = "plain" | "html";
 
 /** The user-facing, persisted settings that affect tokens + background. */
 export interface Settings {
@@ -17,6 +18,9 @@ export interface Settings {
   glass: GlassLevel;
   fontScale: number;
   animatedBg: boolean;
+  /** Global default for the message body view. Each message card starts here;
+   *  a per-message toggle overrides it locally without changing this default. */
+  bodyView: BodyView;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -25,6 +29,7 @@ export const DEFAULT_SETTINGS: Settings = {
   glass: "medium",
   fontScale: 1,
   animatedBg: false,
+  bodyView: "plain",
 };
 
 // The accent picker from the design-time tweaks panel is dropped; VibeMail's
