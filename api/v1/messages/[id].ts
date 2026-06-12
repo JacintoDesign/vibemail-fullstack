@@ -9,17 +9,19 @@ import { deriveStatus, rowToMessage, DbMessageRow } from '../../../src/sync/norm
 import type { MessageStatus } from '../../../src/types/message';
 
 /**
- * GET   /api/v1/messages/:id — fetch a single message by gmailId
- * PATCH /api/v1/messages/:id — modify Gmail labels (read/starred/archived/trashed)
+ * GET    /api/v1/messages/:id — fetch a single message by gmailId
+ * PATCH  /api/v1/messages/:id — modify Gmail labels (read/starred/archived/trashed)
+ * DELETE /api/v1/messages/:id — remove a non-draft message (trash in Gmail + drop the row)
  *
  * `:id` is the Gmail message id (gmailId), not the Supabase row UUID.
  *
  * CONTRACT.md §4.5
  */
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
-  if (req.method === 'GET')   return handleGet(req, res);
-  if (req.method === 'PATCH') return handlePatch(req, res);
-  errorResponse(res, 405, 'METHOD_NOT_ALLOWED', 'Only GET and PATCH are accepted on this endpoint');
+  if (req.method === 'GET')    return handleGet(req, res);
+  if (req.method === 'PATCH')  return handlePatch(req, res);
+  if (req.method === 'DELETE') return handleDelete(req, res);
+  errorResponse(res, 405, 'METHOD_NOT_ALLOWED', 'Only GET, PATCH, and DELETE are accepted on this endpoint');
 }
 
 // ── GET /api/v1/messages/:id ─────────────────────────────────────────────────
@@ -231,6 +233,81 @@ async function handlePatch(req: VercelRequest, res: VercelResponse): Promise<voi
         status:    newStatus,
       },
     });
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+// ── DELETE /api/v1/messages/:id ──────────────────────────────────────────────
+
+async function handleDelete(req: VercelRequest, res: VercelResponse): Promise<void> {
+  let payload;
+  try {
+    payload = verifyJwt(req);
+  } catch (err) {
+    handleError(res, err);
+    return;
+  }
+
+  const { id } = req.query;
+  if (!id || typeof id !== 'string') {
+    errorResponse(res, 400, 'INVALID_BODY', 'Message ID is required in the URL path');
+    return;
+  }
+
+  const supabase = getSupabase();
+
+  try {
+    // ── Fetch the row ──────────────────────────────────────────────────────
+    const { data, error: fetchError } = await supabase
+      .from('messages')
+      .select('gmail_id, draft_id, status')
+      .eq('gmail_id', id)
+      .eq('user_id', payload.sub)
+      .single();
+
+    if (fetchError || !data) {
+      throw new ProviderError('MESSAGE_NOT_FOUND', `No message with id "${id}" found for this user`);
+    }
+
+    const row = data as { gmail_id: string; draft_id: string | null; status: string };
+
+    // Drafts have their own lifecycle endpoint (DELETE /api/v1/drafts/:id),
+    // which removes the underlying Gmail draft via drafts.delete. Refuse them
+    // here so a draft is never orphaned in Gmail while its row disappears.
+    if (row.draft_id || row.status === 'draft') {
+      throw new ProviderError('MESSAGE_IS_DRAFT', 'Use DELETE /api/v1/drafts/:id to remove a draft');
+    }
+
+    // ── Ensure it is out of the mailbox in Gmail ───────────────────────────
+    // The configured OAuth scope is gmail.modify, which permits messages.trash
+    // but NOT messages.delete (permanent deletion needs the full mail.google.com
+    // scope). So "delete forever" means: make sure Gmail has it in Trash (where
+    // Gmail auto-purges it after 30 days), then drop our liberated copy. If the
+    // row is already trashed — the usual path, since the UI only offers this
+    // from the Trash folder — skip the redundant Gmail call.
+    if (row.status !== 'trash') {
+      const auth  = await loadOAuth2Client(payload.sub);
+      const gmail = google.gmail({ version: 'v1', auth });
+      try {
+        await gmail.users.messages.trash({ userId: 'me', id });
+      } catch (err) {
+        throw new ProviderError('MESSAGE_DELETE_FAILED', 'Gmail messages.trash failed', err);
+      }
+    }
+
+    // ── Drop the Supabase row ──────────────────────────────────────────────
+    const { error: deleteError } = await supabase
+      .from('messages')
+      .delete()
+      .eq('gmail_id', id)
+      .eq('user_id', payload.sub);
+
+    if (deleteError) {
+      throw new ProviderError('MESSAGE_DELETE_FAILED', deleteError.message, deleteError);
+    }
+
+    res.status(204).end();
   } catch (err) {
     handleError(res, err);
   }

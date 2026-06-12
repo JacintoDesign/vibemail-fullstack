@@ -19,6 +19,7 @@ import { ApiError } from "@/lib/api-client";
 import {
   createDraft,
   deleteDraft as apiDeleteDraft,
+  deleteMessage as apiDeleteMessage,
   patchMessage,
   sendDraft,
   sendMessage,
@@ -415,16 +416,18 @@ export function VibeMailApp() {
     clearSelection();
     showToast(`${n} moved to Trash.`);
   };
-  // Drafts "Discard" deletes the Gmail draft + Supabase row. Trash "Delete
-  // forever" has no contract endpoint, so the row is only dropped locally.
+  // Drafts "Discard" deletes the Gmail draft + Supabase row via drafts.delete.
+  // Trash "Delete forever" removes the liberated row via DELETE /messages/:id
+  // (the message stays in Gmail Trash, which Gmail auto-purges after 30 days —
+  // permanent Gmail deletion needs the full mail.google.com scope we don't hold).
   const bulkDeleteForever = () => {
     const ids = [...selectedIds];
-    if (filter === "drafts") {
-      ids.forEach((id) => {
-        const m = messages.find((x) => x.id === id);
-        if (m) apiDeleteDraft(m.gmailId).catch((e) => showToast(errMessage(e), "error"));
-      });
-    }
+    ids.forEach((id) => {
+      const m = messages.find((x) => x.id === id);
+      if (!m) return;
+      const remove = filter === "drafts" ? apiDeleteDraft(m.gmailId) : apiDeleteMessage(m.gmailId);
+      remove.catch((e) => showToast(errMessage(e), "error"));
+    });
     removeByIds(ids);
     clearSelection();
     showToast(`${ids.length} ${filter === "drafts" ? "discarded" : "permanently deleted"}.`);

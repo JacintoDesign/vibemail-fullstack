@@ -287,6 +287,11 @@ export function patchMessage(
   });
 }
 
+/** DELETE /api/v1/messages/:id — remove a non-draft message (Gmail trash + row drop, 204). */
+export function deleteMessage(id: string): Promise<void> {
+  return apiFetch(`/messages/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
 /** POST /api/v1/drafts — create a Gmail draft (server manages draftId). */
 export function createDraft(body: {
   to: string;
