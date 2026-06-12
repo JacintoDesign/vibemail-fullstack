@@ -84,6 +84,7 @@ export async function loadThread(threadId: string): Promise<ThreadMsg[]> {
       body: api.bodyPlain ?? "",
       bodyHtml: api.bodyHtml,
       gmailId: api.gmailId,
+      attachments: api.attachments ?? [],
     };
   });
 }
