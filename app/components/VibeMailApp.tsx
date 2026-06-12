@@ -44,6 +44,14 @@ import {
 import type { CSSVars, Message } from "@/lib/types";
 import { useSettings } from "@/providers/SettingsProvider";
 
+/** Order-insensitive equality for two label-id sets — used by the live poll to
+ *  tell whether a row's flags actually moved before triggering a re-render. */
+function sameLabelSet(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const set = new Set(a);
+  return b.every((x) => set.has(x));
+}
+
 /** Turn any thrown error into a short, human banner/toast string. */
 function errMessage(e: unknown): string {
   if (e instanceof ApiError) return e.message || "Something went wrong.";
@@ -211,6 +219,11 @@ export function VibeMailApp() {
   // fetches (e.g. fast folder switches or search keystrokes).
   const reqIdRef = useRef(0);
 
+  // Rows with an optimistic mutation in flight. The live poll skips these so it
+  // can't overwrite a pending local change with stale server truth mid-PATCH;
+  // patchAction reconciles them itself once the response lands.
+  const pendingPatchRef = useRef<Set<string>>(new Set());
+
   const loadFirstPage = useCallback(async () => {
     const myId = ++reqIdRef.current;
     setLoading(true);
@@ -353,13 +366,15 @@ export function VibeMailApp() {
     })();
   }, [filter, searchMode, loading]);
 
-  // ── Live inbox: poll for newly-inserted messages ──────────────────────────
+  // ── Live inbox: poll for new rows AND state changes ───────────────────────
   // There is no browser Supabase client (the only client is server-side and
   // service-role), so rather than a realtime subscription we poll the current
-  // folder on an interval and merge in rows we haven't seen yet. New messages
-  // surface without a manual refresh. We only ADD unseen ids and never
-  // overwrite existing rows, so optimistic local changes (read/star/archive)
-  // are preserved. Skipped during search so live results aren't disturbed.
+  // folder on an interval. We ADD rows we haven't seen yet AND reconcile the
+  // server-derived flags (read/unread, starred, status, labels) of rows we
+  // already have, so a message read/starred/labelled elsewhere goes live here
+  // without a manual refresh. Rows with a local mutation still in flight are
+  // skipped (pendingPatchRef) so the poll can't clobber an optimistic change
+  // mid-PATCH. Skipped during search so live results aren't disturbed.
   useEffect(() => {
     if (searchMode) return;
     const POLL_INTERVAL_MS = 20_000;
@@ -375,7 +390,34 @@ export function VibeMailApp() {
         setMessages((ms) => {
           const seen = new Set(ms.map((m) => m.id));
           const fresh = page.messages.filter((m) => !seen.has(m.id));
-          return fresh.length ? [...fresh, ...ms] : ms;
+          const byId = new Map(page.messages.map((m) => [m.id, m]));
+          let changed = false;
+          const reconciled = ms.map((m) => {
+            if (pendingPatchRef.current.has(m.id)) return m; // in-flight optimistic — leave it
+            const srv = byId.get(m.id);
+            if (!srv) return m; // not in this page (older, or other folder)
+            if (
+              srv.isRead === m.isRead &&
+              srv.isStarred === m.isStarred &&
+              srv.status === m.status &&
+              sameLabelSet(srv.labelIds, m.labelIds)
+            ) {
+              return m; // nothing changed — keep the identity to avoid a re-render
+            }
+            changed = true;
+            // Reconcile only the server-derived flags; keep UI-only state such as
+            // an already-expanded `thread` from loadThread.
+            return {
+              ...m,
+              isRead: srv.isRead,
+              isStarred: srv.isStarred,
+              status: srv.status,
+              labelIds: srv.labelIds,
+              labels: srv.labels,
+            };
+          });
+          if (!fresh.length && !changed) return ms;
+          return fresh.length ? [...fresh, ...reconciled] : reconciled;
         });
       } catch {
         /* transient (offline / token refresh) — just try again next tick */
@@ -493,6 +535,7 @@ export function VibeMailApp() {
     body: { read?: boolean; starred?: boolean; archived?: boolean; trashed?: boolean },
   ): Promise<void> => {
     const prev = messages.find((x) => x.id === m.id);
+    pendingPatchRef.current.add(m.id);
     update(m.id, optimistic);
     try {
       const { message: r } = await patchMessage(m.gmailId, body);
@@ -508,6 +551,8 @@ export function VibeMailApp() {
         });
       }
       showToast(errMessage(e), "error");
+    } finally {
+      pendingPatchRef.current.delete(m.id);
     }
   };
 
