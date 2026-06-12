@@ -24,8 +24,8 @@ export interface ThreadMsg {
   body: string;
   /** Decoded HTML body, rendered in a sandboxed iframe when `body` is empty. */
   bodyHtml?: string | null;
-  /** Gmail message id for this thread message (used by "View in Gmail" and to
-   *  fetch attachment bytes on demand). */
+  /** Gmail message id for this thread message (used to fetch attachment bytes
+   *  on demand). */
   gmailId?: string;
   /** Received-mail attachments. Bytes are fetched lazily on download. */
   attachments?: Attachment[];

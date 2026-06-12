@@ -5,7 +5,6 @@
 import {
   Archive,
   ChevronDown,
-  ExternalLink,
   Inbox,
   LogOut,
   Mail,
@@ -39,7 +38,6 @@ export type IconName =
   | "send"
   | "refresh"
   | "paperclip"
-  | "external"
   | "x"
   | "dot"
   | "chevronDown";
@@ -59,7 +57,6 @@ const MAP: Record<Exclude<IconName, "dot">, LucideIcon> = {
   send: Send,
   refresh: RotateCw,
   paperclip: Paperclip,
-  external: ExternalLink,
   x: X,
   chevronDown: ChevronDown,
 };
