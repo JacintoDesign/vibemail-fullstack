@@ -310,6 +310,22 @@ export function deleteMessage(id: string): Promise<void> {
   return apiFetch(`/messages/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
+/** POST /api/v1/messages/:id/labels — add a (non-protected) label to a message. */
+export function addMessageLabel(id: string, labelId: string): Promise<{ message: ApiMessage }> {
+  return apiFetch(`/messages/${encodeURIComponent(id)}/labels`, {
+    method: "POST",
+    body: JSON.stringify({ labelId }),
+  });
+}
+
+/** DELETE /api/v1/messages/:id/labels — remove a label from a message. */
+export function removeMessageLabel(id: string, labelId: string): Promise<{ message: ApiMessage }> {
+  return apiFetch(`/messages/${encodeURIComponent(id)}/labels`, {
+    method: "DELETE",
+    body: JSON.stringify({ labelId }),
+  });
+}
+
 /** POST /api/v1/drafts — create a Gmail draft (server manages draftId). */
 export function createDraft(body: {
   to: string;

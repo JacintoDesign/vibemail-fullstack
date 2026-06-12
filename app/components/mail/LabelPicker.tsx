@@ -2,8 +2,8 @@
 
 // Per-message label adder. A small "+" that sits in a card's label row (after
 // any badges, or on its own when there are none) and reveals on hover. Opening
-// it shows the labels not yet on the message. Phase-1 preview only — applying a
-// label mutates local state; CONTRACT.md §4.5 has no add/remove-label endpoint.
+// it shows the labels not yet on the message. Applying a label calls
+// POST /api/v1/messages/:id/labels (optimistic, reconciled from the response).
 //
 // Open state is controlled by the parent row so the label row can stay mounted
 // while the menu is open even after the pointer leaves the card. The menu itself
@@ -148,7 +148,7 @@ export function LabelPicker({
                   lineHeight: 1.5,
                 }}
               >
-                Add label · preview
+                Add label
               </div>
               {remaining.length === 0 ? (
                 <div

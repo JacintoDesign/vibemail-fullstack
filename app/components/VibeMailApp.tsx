@@ -17,13 +17,17 @@ import { Sidebar } from "@/components/mail/Sidebar";
 import { ThreadWindow, type PopoutWin } from "@/components/mail/ThreadWindow";
 import { ApiError } from "@/lib/api-client";
 import {
+  addMessageLabel,
   createDraft,
   deleteDraft as apiDeleteDraft,
   deleteMessage as apiDeleteMessage,
+  labelToId,
   patchMessage,
+  removeMessageLabel,
   sendDraft,
   sendMessage,
   updateDraft,
+  userLabels,
 } from "@/lib/api";
 import {
   DEFAULT_LABELS,
@@ -444,21 +448,38 @@ export function VibeMailApp() {
     clearSelection();
     showToast(`${n} marked ${read ? "read" : "unread"}.`);
   };
-  // Per-message label add (row "+" picker). Phase-1 preview only — no
-  // add/remove-label endpoint exists in CONTRACT.md yet.
+  // Per-message label add/remove (row "+" picker and label-chip "×"). Optimistic
+  // local update, then POST/DELETE /messages/:id/labels, reconciling the chips
+  // from the server's authoritative labelIds. ALREADY_IN_STATE is a no-op
+  // success (the optimistic value was already correct); other errors roll back.
+  const reconcileLabels = (id: string, labelIds: string[]) =>
+    update(id, { labelIds, labels: userLabels(labelIds) });
+
   const addLabelToMessage = (id: string, label: string) => {
-    setMessages((ms) =>
-      ms.map((m) =>
-        m.id === id ? { ...m, labels: Array.from(new Set([...(m.labels || []), label])) } : m,
-      ),
-    );
-    showToast(`Labeled "${label}" — preview only, not yet synced.`);
+    const m = messages.find((x) => x.id === id);
+    if (!m) return;
+    const prev = m.labels || [];
+    update(id, { labels: Array.from(new Set([...prev, label])) });
+    addMessageLabel(m.gmailId, labelToId(label))
+      .then(({ message }) => reconcileLabels(id, message.labelIds ?? []))
+      .catch((e) => {
+        if (e instanceof ApiError && e.code === "ALREADY_IN_STATE") return;
+        update(id, { labels: prev });
+        showToast(errMessage(e), "error");
+      });
   };
   const removeLabelFromMessage = (id: string, label: string) => {
-    setMessages((ms) =>
-      ms.map((m) => (m.id === id ? { ...m, labels: (m.labels || []).filter((l) => l !== label) } : m)),
-    );
-    showToast(`Removed "${label}" — preview only, not yet synced.`);
+    const m = messages.find((x) => x.id === id);
+    if (!m) return;
+    const prev = m.labels || [];
+    update(id, { labels: prev.filter((l) => l !== label) });
+    removeMessageLabel(m.gmailId, labelToId(label))
+      .then(({ message }) => reconcileLabels(id, message.labelIds ?? []))
+      .catch((e) => {
+        if (e instanceof ApiError && e.code === "ALREADY_IN_STATE") return;
+        update(id, { labels: prev });
+        showToast(errMessage(e), "error");
+      });
   };
 
   const readWriteActions: BulkAction[] = [
