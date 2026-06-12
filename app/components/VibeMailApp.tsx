@@ -15,6 +15,7 @@ import { CollapsedRail, Resizer } from "@/components/mail/PanelChrome";
 import { ReadingPane } from "@/components/mail/ReadingPane";
 import { Sidebar } from "@/components/mail/Sidebar";
 import { ThreadWindow, type PopoutWin } from "@/components/mail/ThreadWindow";
+import { Icon } from "@/components/ds";
 import { ApiError } from "@/lib/api-client";
 import {
   addMessageLabel,
@@ -569,10 +570,34 @@ export function VibeMailApp() {
     />
   ) : null;
 
-  const showToast = (txt: string, tone: "success" | "error" = "success") => {
-    setToast({ txt, tone });
-    setTimeout(() => setToast(null), 2600);
+  // Toast lifecycle: success/info toasts auto-dismiss after a 5s minimum;
+  // error toasts are sticky and stay until the user clicks the X. A ref tracks
+  // the pending timer so a new toast (or a manual dismiss) cancels the old one.
+  const TOAST_MIN_MS = 5000;
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dismissToast = () => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+    setToast(null);
   };
+  const showToast = (txt: string, tone: "success" | "error" = "success") => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+    setToast({ txt, tone });
+    if (tone !== "error") {
+      toastTimerRef.current = setTimeout(() => {
+        setToast(null);
+        toastTimerRef.current = null;
+      }, TOAST_MIN_MS);
+    }
+  };
+  useEffect(() => () => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+  }, []);
 
   const openMessage = (m: Message) => {
     if (m.status === "draft") {
@@ -948,6 +973,7 @@ export function VibeMailApp() {
 
   const toastEl = toast ? (
     <div
+      role={toast.tone === "error" ? "alert" : "status"}
       style={{
         position: "absolute",
         left: "50%",
@@ -956,30 +982,62 @@ export function VibeMailApp() {
         zIndex: 50,
         display: "flex",
         alignItems: "center",
-        gap: 8,
-        padding: "10px 16px",
+        gap: 11,
+        padding: "13px 13px 13px 18px",
         background: "var(--glass-drawer)",
-        border: "1px solid var(--border-strong)",
+        border: `1px solid ${toast.tone === "error" ? "var(--danger)" : "var(--border-strong)"}`,
         borderRadius: "var(--radius-sm)",
         WebkitBackdropFilter: "var(--glass-blur-3)",
         backdropFilter: "var(--glass-blur-3)",
         boxShadow: "var(--shadow-3)",
         fontFamily: "var(--font-mono)",
-        fontSize: "var(--text-caption)",
+        fontSize: "var(--text-body)",
+        lineHeight: 1.35,
         color: "var(--text-primary)",
         maxWidth: "90%",
       }}
     >
       <span
         style={{
-          width: 7,
-          height: 7,
+          width: 9,
+          height: 9,
           borderRadius: "var(--radius-full)",
           background: toast.tone === "error" ? "var(--danger)" : "var(--success)",
           flexShrink: 0,
         }}
       />
-      {toast.txt}
+      <span style={{ flex: 1 }}>{toast.txt}</span>
+      <button
+        type="button"
+        aria-label="Dismiss notification"
+        title="Dismiss"
+        onClick={dismissToast}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 24,
+          height: 24,
+          flexShrink: 0,
+          padding: 0,
+          border: "none",
+          borderRadius: "var(--radius-sm)",
+          background: "transparent",
+          color: "var(--text-faint)",
+          cursor: "pointer",
+          transition: "background var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard)",
+        }}
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.background = "var(--glass-2)";
+          (e.currentTarget as HTMLButtonElement).style.color = "var(--text-primary)";
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.background = "transparent";
+          (e.currentTarget as HTMLButtonElement).style.color = "var(--text-faint)";
+        }}
+      >
+        <Icon name="x" size={15} color="currentColor" />
+      </button>
     </div>
   ) : null;
 
