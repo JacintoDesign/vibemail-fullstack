@@ -174,6 +174,11 @@ export function listMessages(opts: {
   );
 }
 
+/** GET /api/v1/messages/:id — fetch a single message by gmailId. */
+export function getMessage(id: string): Promise<{ message: ApiMessage }> {
+  return apiFetch(`/messages/${encodeURIComponent(id)}`);
+}
+
 /** GET /api/v1/messages/search — server-side substring search. */
 export function searchMessages(opts: {
   q: string;

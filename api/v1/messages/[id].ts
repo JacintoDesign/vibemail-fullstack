@@ -5,24 +5,63 @@ import { verifyJwt } from '../../../src/middleware/jwt';
 import { errorResponse, handleError } from '../../../src/middleware/error';
 import { ProviderError } from '../../../src/types/provider';
 import { loadOAuth2Client } from '../../../src/providers/gmail/auth';
-import { deriveStatus } from '../../../src/sync/normalize';
+import { deriveStatus, rowToMessage, DbMessageRow } from '../../../src/sync/normalize';
 import type { MessageStatus } from '../../../src/types/message';
 
 /**
- * PATCH /api/v1/messages/:id
+ * GET   /api/v1/messages/:id — fetch a single message by gmailId
+ * PATCH /api/v1/messages/:id — modify Gmail labels (read/starred/archived/trashed)
  *
- * Modifies Gmail labels and updates the corresponding fields in Supabase.
- * Accepts any combination of read, starred, archived, and trashed booleans
- * in a single request.
+ * `:id` is the Gmail message id (gmailId), not the Supabase row UUID.
  *
  * CONTRACT.md §4.5
  */
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
-  if (req.method !== 'PATCH') {
-    errorResponse(res, 405, 'METHOD_NOT_ALLOWED', 'Only PATCH is accepted on this endpoint');
+  if (req.method === 'GET')   return handleGet(req, res);
+  if (req.method === 'PATCH') return handlePatch(req, res);
+  errorResponse(res, 405, 'METHOD_NOT_ALLOWED', 'Only GET and PATCH are accepted on this endpoint');
+}
+
+// ── GET /api/v1/messages/:id ─────────────────────────────────────────────────
+
+async function handleGet(req: VercelRequest, res: VercelResponse): Promise<void> {
+  let payload;
+  try {
+    payload = verifyJwt(req);
+  } catch (err) {
+    handleError(res, err);
     return;
   }
 
+  const { id } = req.query;
+  if (!id || typeof id !== 'string') {
+    errorResponse(res, 400, 'INVALID_BODY', 'Message ID is required in the URL path');
+    return;
+  }
+
+  const supabase = getSupabase();
+
+  try {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('gmail_id', id)
+      .eq('user_id', payload.sub)
+      .single();
+
+    if (error || !data) {
+      throw new ProviderError('MESSAGE_NOT_FOUND', `No message with id "${id}" found for this user`);
+    }
+
+    res.status(200).json({ message: rowToMessage(data as DbMessageRow) });
+  } catch (err) {
+    handleError(res, err);
+  }
+}
+
+// ── PATCH /api/v1/messages/:id ───────────────────────────────────────────────
+
+async function handlePatch(req: VercelRequest, res: VercelResponse): Promise<void> {
   // ── Auth ──────────────────────────────────────────────────────────────────
   let payload;
   try {
