@@ -278,12 +278,33 @@ body.vm-col-dragging * {
 .vm-msg-date-stack {
   display: none;
 }
+/* Sender name + email sit on one line when there's room and truncate the email. */
+.vm-msg-from {
+  white-space: nowrap;
+}
+.vm-msg-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 @container vmthread (max-width: 440px) {
   .vm-msg-date-inline {
     display: none;
   }
   .vm-msg-date-stack {
     display: block;
+  }
+  /* Narrow (mobile) cards: let a long sender name + email wrap to the next
+     line instead of overflowing across the collapse/expand button. */
+  .vm-msg-idrow {
+    flex-wrap: wrap;
+  }
+  .vm-msg-from,
+  .vm-msg-email {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
   }
 }
 

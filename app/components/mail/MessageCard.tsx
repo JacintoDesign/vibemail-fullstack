@@ -75,24 +75,22 @@ export function MessageCard({
             style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}
           >
             <span
+              className="vm-msg-from"
               style={{
                 fontFamily: "var(--font-mono)",
                 fontSize: "var(--text-body)",
                 fontWeight: "var(--fw-bold)",
                 color: "var(--text-primary)",
-                whiteSpace: "nowrap",
               }}
             >
               {msg.from}
             </span>
             <span
+              className="vm-msg-email"
               style={{
                 fontFamily: "var(--font-mono)",
                 fontSize: "var(--text-micro)",
                 color: "var(--text-muted)",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
               }}
             >
               {msg.email}
