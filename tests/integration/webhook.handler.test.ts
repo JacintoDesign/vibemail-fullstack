@@ -4,9 +4,11 @@
  * processGmailNotification (src/webhook/gmail.ts) is mocked — this tests
  * only the HTTP contract of the webhook handler:
  *   - Method guard (405)
- *   - Acknowledge-first: HTTP 200 is sent BEFORE processing begins
+ *   - Process-first: the handler awaits processing, THEN sends HTTP 200, so
+ *     Pub/Sub retries on failure and Vercel does not kill in-flight async work
+ *     by flushing the response early (see the handler's own comment)
  *   - processGmailNotification is called with the body and token from query
- *   - Errors from processGmailNotification are caught (200 already sent)
+ *   - Errors from processGmailNotification are caught and still ack (200)
  */
 
 import handler from '../../api/webhook/gmail';
@@ -49,28 +51,32 @@ describe('POST /webhook/gmail — API entry point', () => {
     expect(state.statusCode).toBe(405);
   });
 
-  // ── Acknowledge-first pattern ──────────────────────────────────────────────
+  // ── Process-first pattern ───────────────────────────────────────────────────
 
-  it('sends HTTP 200 before processGmailNotification resolves (ack-first)', async () => {
-    // processGmailNotification is a long-running promise that never resolves
-    // until we manually release it — the handler must still return 200 immediately.
+  it('waits for processGmailNotification before sending 200 (process-first)', async () => {
+    // The handler deliberately processes BEFORE acking: in Vercel the function
+    // is torn down once the response flushes, so a respond-first pattern would
+    // kill the in-flight sync work. While processing is pending, no 200 yet.
     let releaseProcess!: () => void;
     const processPending = new Promise<void>(resolve => { releaseProcess = resolve; });
     mockProcess.mockReturnValue(processPending);
 
     const { state, res } = mockRes();
-    await handler(
+    const handled = handler(
       mockReq({ method: 'POST', query: { token: 'tok' }, body: VALID_PAYLOAD }),
       res,
     );
 
-    // Handler has returned — 200 must already be sent
+    // Processing is still in flight — the handler must NOT have acked yet.
+    await new Promise(resolve => setImmediate(resolve));
+    expect(mockProcess).toHaveBeenCalled();
+    expect(state.ended).toBe(false);
+
+    // Release processing; the handler can now ack with 200.
+    releaseProcess();
+    await handled;
     expect(state.statusCode).toBe(200);
     expect(state.ended).toBe(true);
-
-    // Release the pending process (cleanup)
-    releaseProcess();
-    await processPending;
   });
 
   // ── processGmailNotification invocation ───────────────────────────────────
