@@ -726,10 +726,11 @@ export function Sidebar({
               panelRef={panelRef}
               mobile={mobile}
               onClose={() => setSettingsOpen(false)}
-              // Collapsed rail: size the panel to the expanded sidebar's inner
-              // width (full width minus its 12px horizontal padding either side)
-              // instead of the narrow rail gear.
-              widthOverride={rail ? (width || 224) - 24 : undefined}
+              // Collapsed rail: the gear is only ~44px wide and the expanded
+              // sidebar can be narrow enough to wrap "Keyboard shortcuts" inside
+              // its fixed-height button. Use a fixed, comfortably wider width so
+              // every row — including that button — stays on one line.
+              widthOverride={rail ? 248 : undefined}
             />
           )}
           <button
