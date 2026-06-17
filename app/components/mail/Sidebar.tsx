@@ -213,6 +213,10 @@ function SegRow<T extends string>({
   );
 }
 
+// Minimum width for the settings popup. ~210px is the point where "Keyboard
+// shortcuts" stops wrapping inside its fixed-height button; 224 leaves headroom.
+const MIN_PANEL_WIDTH = 224;
+
 function SettingsPanel({
   theme,
   onToggleTheme,
@@ -267,7 +271,10 @@ function SettingsPanel({
     setPos({
       bottom: window.innerHeight - r.top + 12,
       left: Math.max(8, r.left),
-      width: widthOverride ?? r.width,
+      // Floor the width so the panel's widest row ("Keyboard shortcuts", whose
+      // button has a fixed height and would otherwise wrap) stays on one line
+      // even when the expanded sidebar is dragged narrow.
+      width: Math.max(widthOverride ?? r.width, MIN_PANEL_WIDTH),
     });
   }, [anchorRef, widthOverride]);
 
