@@ -10,7 +10,7 @@
  *   THREAD_NOT_FOUND, GMAIL_RATE_LIMITED, GMAIL_SEND_FAILED
  */
 
-import handler from '../../api/v1/messages';
+import handler from '../../src/routes/messages/collection';
 import * as sendModule from '../../src/send/index';
 import { signJwt } from '../../src/middleware/jwt';
 import { ProviderError } from '../../src/types/provider';

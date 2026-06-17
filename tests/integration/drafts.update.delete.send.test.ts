@@ -14,8 +14,8 @@
  * NOTE: requires the schema migration to be applied (status, draft_id columns).
  */
 
-import updateDeleteHandler from '../../api/v1/drafts/[id]/index';
-import sendHandler         from '../../api/v1/drafts/[id]/send';
+import updateDeleteHandler from '../../src/routes/drafts/item';
+import sendHandler         from '../../src/routes/drafts/send';
 import * as authModule     from '../../src/providers/gmail/auth';
 import { signJwt }         from '../../src/middleware/jwt';
 import { ProviderError }   from '../../src/types/provider';

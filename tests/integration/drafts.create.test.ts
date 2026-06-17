@@ -12,7 +12,7 @@
  * NOTE: requires the schema migration to be applied (status, draft_id columns).
  */
 
-import handler from '../../api/v1/drafts';
+import handler from '../../src/routes/drafts/collection';
 import * as authModule from '../../src/providers/gmail/auth';
 import { signJwt } from '../../src/middleware/jwt';
 import { ProviderError } from '../../src/types/provider';

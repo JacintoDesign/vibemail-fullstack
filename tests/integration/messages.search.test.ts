@@ -11,7 +11,7 @@
  * NOTE: requires the schema migration to be applied (status, draft_id columns).
  */
 
-import handler from '../../api/v1/messages/search';
+import handler from '../../src/routes/messages/search';
 import { signJwt } from '../../src/middleware/jwt';
 import { seedUser, seedMessage, cleanupUser } from '../helpers/supabase';
 import { mockReq, mockRes } from '../helpers/request';

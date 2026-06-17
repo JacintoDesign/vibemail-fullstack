@@ -10,7 +10,7 @@
  * and MESSAGE_DELETE_FAILED when Gmail trash throws.
  */
 
-import handler from '../../api/v1/messages/[id]';
+import handler from '../../src/routes/messages/item';
 import * as authModule from '../../src/providers/gmail/auth';
 import { signJwt } from '../../src/middleware/jwt';
 import { seedUser, seedMessage, cleanupUser, getTestClient } from '../helpers/supabase';

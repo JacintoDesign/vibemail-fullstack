@@ -10,7 +10,7 @@
  * 200 add, 200 remove, and the Supabase label_ids write-through.
  */
 
-import handler from '../../api/v1/messages/[id]/labels';
+import handler from '../../src/routes/messages/labels';
 import * as authModule from '../../src/providers/gmail/auth';
 import { signJwt } from '../../src/middleware/jwt';
 import { seedUser, seedMessage, cleanupUser, getTestClient } from '../helpers/supabase';

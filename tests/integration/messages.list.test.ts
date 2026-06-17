@@ -16,7 +16,7 @@
  * 502 mapping is also covered by the middleware unit test.
  */
 
-import handler from '../../api/v1/messages';
+import handler from '../../src/routes/messages/collection';
 import { signJwt } from '../../src/middleware/jwt';
 import { seedUser, seedMessage, cleanupUser } from '../helpers/supabase';
 import { mockReq, mockRes } from '../helpers/request';

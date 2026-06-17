@@ -1,11 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { google } from 'googleapis';
 import { createClient } from '@supabase/supabase-js';
-import { verifyJwt } from '../../../../src/middleware/jwt';
-import { errorResponse, handleError } from '../../../../src/middleware/error';
-import { ProviderError } from '../../../../src/types/provider';
-import { loadOAuth2Client } from '../../../../src/providers/gmail/auth';
-import { deriveStatus, rowToMessage, DbMessageRow } from '../../../../src/sync/normalize';
+import { verifyJwt } from '../../middleware/jwt';
+import { errorResponse, handleError } from '../../middleware/error';
+import { ProviderError } from '../../types/provider';
+import { loadOAuth2Client } from '../../providers/gmail/auth';
+import { deriveStatus, rowToMessage, DbMessageRow } from '../../sync/normalize';
 
 /**
  * POST   /api/v1/messages/:id/labels — add a label to a message

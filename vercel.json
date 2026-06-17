@@ -2,7 +2,12 @@
   "installCommand": "npm install",
   "buildCommand": "next build",
   "rewrites": [
-    { "source": "/webhook/gmail", "destination": "/api/webhook/gmail" }
+    { "source": "/webhook/gmail", "destination": "/api/webhook/gmail" },
+    { "source": "/api/v1/messages/search", "destination": "/api/v1/messages?__route=search" },
+    { "source": "/api/v1/messages/:id/labels", "destination": "/api/v1/messages?__route=labels&id=:id" },
+    { "source": "/api/v1/messages/:id", "destination": "/api/v1/messages?__route=item&id=:id" },
+    { "source": "/api/v1/drafts/:id/send", "destination": "/api/v1/drafts?__route=send&id=:id" },
+    { "source": "/api/v1/drafts/:id", "destination": "/api/v1/drafts?__route=item&id=:id" }
   ],
   "crons": [
     {

@@ -1,9 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
-import { verifyJwt } from '../../../src/middleware/jwt';
-import { errorResponse, handleError } from '../../../src/middleware/error';
-import { ProviderError } from '../../../src/types/provider';
-import { rowToMessage, DbMessageRow } from '../../../src/sync/normalize';
+import { verifyJwt } from '../../middleware/jwt';
+import { errorResponse, handleError } from '../../middleware/error';
+import { ProviderError } from '../../types/provider';
+import { rowToMessage, DbMessageRow } from '../../sync/normalize';
 
 /**
  * GET /api/v1/messages/search

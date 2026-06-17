@@ -8,7 +8,7 @@
  * and the 405 method guard.
  */
 
-import handler from '../../api/v1/messages/[id]';
+import handler from '../../src/routes/messages/item';
 import { signJwt } from '../../src/middleware/jwt';
 import { seedUser, seedMessage, cleanupUser } from '../helpers/supabase';
 import { mockReq, mockRes } from '../helpers/request';
