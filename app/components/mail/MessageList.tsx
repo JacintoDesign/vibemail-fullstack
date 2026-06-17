@@ -3,11 +3,14 @@
 // Middle column: folder header + read-toggle + search + cards + states.
 // Ported from MessageList.jsx. The inbox/search card is the shared MessageRow.
 
+import { useEffect, useRef } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import { AnimatePresence, MotionConfig, motion } from "motion/react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Banner, Button, Icon, IconButton, Input, Skeleton } from "@/components/ds";
 import type { IconName } from "@/components/ds";
 import type { Message } from "@/lib/types";
+import type { Density } from "@/lib/shell-vars";
+import { useSettings } from "@/providers/SettingsProvider";
 import { ChromeBtn } from "./PanelChrome";
 import { Hamburger } from "./Hamburger";
 import { MessageRow } from "./MessageRow";
@@ -191,6 +194,140 @@ function ListEmpty({ icon, text, hint }: { icon: IconName; text: string; hint?: 
   );
 }
 
+interface VirtualListProps {
+  messages: Message[];
+  mobile?: boolean;
+  selectedId: string | null;
+  selectedIds?: Set<string>;
+  selectionActive?: boolean;
+  onOpen: (m: Message) => void;
+  onToggleRead: (m: Message) => void;
+  onToggleStar: (m: Message) => void;
+  onToggleSelect?: (id: string) => void;
+  labelOptions?: string[];
+  onAddLabel?: (id: string, label: string) => void;
+  onRemoveLabel?: (id: string, label: string) => void;
+  showLoadMore: boolean;
+  loadingMore?: boolean;
+  onLoadMore?: () => void;
+}
+
+// First-paint height guess per density (real heights are measured once mounted).
+// Compact drops the snippet + labels; comfy adds padding; mobile is its own row.
+function estimateRowHeight(density: Density, mobile?: boolean): number {
+  if (mobile) return 96;
+  if (density === "compact") return 60;
+  if (density === "comfy") return 172;
+  return 150;
+}
+
+// Windowed message list. A synced mailbox can hold thousands of rows; mounting
+// them all (each a glass card with its own backdrop-filter blur layer) tanks
+// scroll/paint performance. The virtualizer keeps only the visible rows (plus a
+// small overscan) in the DOM. Row heights vary by density and content, so each
+// row is measured live via measureElement rather than assumed fixed.
+function MessageVirtualList({
+  messages,
+  mobile,
+  selectedId,
+  selectedIds,
+  selectionActive,
+  onOpen,
+  onToggleRead,
+  onToggleStar,
+  onToggleSelect,
+  labelOptions,
+  onAddLabel,
+  onRemoveLabel,
+  showLoadMore,
+  loadingMore,
+  onLoadMore,
+}: VirtualListProps) {
+  const { density } = useSettings();
+  const parentRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: messages.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => estimateRowHeight(density, mobile),
+    overscan: 6,
+    getItemKey: (index) => messages[index].id,
+  });
+
+  // A density switch changes every row's height at once, but the virtualizer
+  // only remeasures mounted rows — off-screen rows keep their cached height, so
+  // the total scroll size stays stale until each is scrolled past. Clearing the
+  // measurement cache makes them all re-estimate at the new density immediately.
+  useEffect(() => {
+    virtualizer.measure();
+  }, [density, virtualizer]);
+
+  const items = virtualizer.getVirtualItems();
+
+  return (
+    <div
+      ref={parentRef}
+      style={{
+        flex: 1,
+        overflowY: "auto",
+        minHeight: 0,
+        scrollbarGutter: "stable",
+        padding: mobile ? "9px 8px" : "12px 10px",
+      }}
+    >
+      <div style={{ height: virtualizer.getTotalSize(), width: "100%", position: "relative" }}>
+        {items.map((vi) => {
+          const m = messages[vi.index];
+          return (
+            <div
+              key={vi.key}
+              data-index={vi.index}
+              ref={virtualizer.measureElement}
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: "100%",
+                transform: `translateY(${vi.start}px)`,
+                // The inter-row gap lives in the measured box so cumulative
+                // offsets stay correct without a flex `gap`.
+                paddingBottom: "var(--card-gap)",
+              }}
+            >
+              <MessageRow
+                m={m}
+                compact={mobile}
+                selected={selectedId === m.id}
+                onOpen={onOpen}
+                onToggleRead={() => onToggleRead(m)}
+                onToggleStar={() => onToggleStar(m)}
+                selectable={!mobile && !!onToggleSelect}
+                checked={selectedIds?.has(m.id)}
+                selectionActive={selectionActive}
+                onToggleSelect={() => onToggleSelect?.(m.id)}
+                availableLabels={mobile ? undefined : labelOptions}
+                onAddLabel={mobile ? undefined : (label) => onAddLabel?.(m.id, label)}
+                onRemoveLabel={mobile ? undefined : (label) => onRemoveLabel?.(m.id, label)}
+              />
+            </div>
+          );
+        })}
+      </div>
+      {showLoadMore && (
+        <div style={{ display: "flex", justifyContent: "center", padding: "8px 0 4px" }}>
+          <Button
+            variant="secondary"
+            icon="chevronDown"
+            disabled={loadingMore}
+            onClick={() => onLoadMore?.()}
+          >
+            {loadingMore ? "Loading…" : "Load more"}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function MessageList({
   messages,
   loading,
@@ -247,7 +384,6 @@ export function MessageList({
   };
 
   return (
-    <MotionConfig reducedMotion="user">
     <div style={containerStyle}>
       {/* Folder header */}
       <div
@@ -368,77 +504,50 @@ export function MessageList({
       ) : null}
 
       {/* List body */}
-      <div style={{ flex: 1, overflowY: "auto", minHeight: 0, scrollbarGutter: "stable" }}>
+      <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
         {loading ? (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "var(--card-gap)",
-              padding: mobile ? "9px 8px" : "12px 10px",
-            }}
-          >
-            {[0, 1, 2, 3, 4, 5, 6].map((i) => (
-              <SkeletonCard key={i} compact={mobile} />
-            ))}
+          <div style={{ flex: 1, overflowY: "auto", minHeight: 0, scrollbarGutter: "stable" }}>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "var(--card-gap)",
+                padding: mobile ? "9px 8px" : "12px 10px",
+              }}
+            >
+              {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+                <SkeletonCard key={i} compact={mobile} />
+              ))}
+            </div>
           </div>
         ) : error ? null : messages.length === 0 ? (
-          <ListEmpty
-            icon={searchMode ? "search" : "inbox"}
-            text={searchMode ? "No messages match your search." : emptyText || "Your inbox is empty."}
-            hint={searchMode ? "Try a different name, subject, or keyword." : emptyHint}
-          />
+          <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
+            <ListEmpty
+              icon={searchMode ? "search" : "inbox"}
+              text={searchMode ? "No messages match your search." : emptyText || "Your inbox is empty."}
+              hint={searchMode ? "Try a different name, subject, or keyword." : emptyHint}
+            />
+          </div>
         ) : (
-          <motion.div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "var(--card-gap)",
-              padding: mobile ? "9px 8px" : "12px 10px",
-            }}
-            // Cascade the rows in on first paint; new arrivals fade in solo.
-            initial="hidden"
-            animate="show"
-            variants={{ show: { transition: { staggerChildren: 0.035 } } }}
-          >
-            {/* popLayout pulls a removed row out of flow so the rest slide up
-                to fill the gap as it shrinks away. */}
-            <AnimatePresence initial={false} mode="popLayout">
-              {visibleMessages.map((m) => (
-                <MessageRow
-                  key={m.id}
-                  m={m}
-                  compact={mobile}
-                  selected={selectedId === m.id}
-                  onOpen={onOpen}
-                  onToggleRead={() => onToggleRead(m)}
-                  onToggleStar={() => onToggleStar(m)}
-                  selectable={!mobile && !!onToggleSelect}
-                  checked={selectedIds?.has(m.id)}
-                  selectionActive={selectionActive}
-                  onToggleSelect={() => onToggleSelect?.(m.id)}
-                  availableLabels={mobile ? undefined : labelOptions}
-                  onAddLabel={mobile ? undefined : (label) => onAddLabel?.(m.id, label)}
-                  onRemoveLabel={mobile ? undefined : (label) => onRemoveLabel?.(m.id, label)}
-                />
-              ))}
-            </AnimatePresence>
-            {showLoadMore && (
-              <div style={{ display: "flex", justifyContent: "center", padding: "8px 0 4px" }}>
-                <Button
-                  variant="secondary"
-                  icon="chevronDown"
-                  disabled={loadingMore}
-                  onClick={() => onLoadMore?.()}
-                >
-                  {loadingMore ? "Loading…" : "Load more"}
-                </Button>
-              </div>
-            )}
-          </motion.div>
+          <MessageVirtualList
+            messages={visibleMessages}
+            mobile={mobile}
+            selectedId={selectedId}
+            selectedIds={selectedIds}
+            selectionActive={selectionActive}
+            onOpen={onOpen}
+            onToggleRead={onToggleRead}
+            onToggleStar={onToggleStar}
+            onToggleSelect={onToggleSelect}
+            labelOptions={labelOptions}
+            onAddLabel={onAddLabel}
+            onRemoveLabel={onRemoveLabel}
+            showLoadMore={showLoadMore}
+            loadingMore={loadingMore}
+            onLoadMore={onLoadMore}
+          />
         )}
       </div>
     </div>
-    </MotionConfig>
   );
 }

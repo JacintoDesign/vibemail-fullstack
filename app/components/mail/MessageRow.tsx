@@ -5,7 +5,6 @@
 // VMInboxCard in MessageList.jsx.
 
 import { useState, type MouseEvent } from "react";
-import { motion } from "motion/react";
 import { decodeEntities } from "@/lib/text";
 import { Badge, Icon } from "@/components/ds";
 import type { Message } from "@/lib/types";
@@ -32,14 +31,6 @@ export interface MessageRowProps {
   /** Remove a label from this message (shows an "x" on each badge on hover). */
   onRemoveLabel?: (label: string) => void;
 }
-
-// Per-row enter/exit. The parent list orchestrates the stagger via
-// staggerChildren; named variants ("hidden"/"show") let it cascade in. `exit`
-// + the list's popLayout mode shrink a removed row out while siblings reflow.
-const rowVariants = {
-  hidden: { opacity: 0, y: 8 },
-  show: { opacity: 1, y: 0 },
-};
 
 function CheckGlyph() {
   return (
@@ -90,18 +81,12 @@ export function MessageRow({
   };
 
   return (
-    <motion.div
+    <div
       className="vm-row"
       role="button"
       tabIndex={0}
       data-vm-row-id={m.id}
       aria-label={`${m.senderName}: ${m.subject || "(no subject)"}`}
-      // layout="position" animates only the row's offset (not its size) as
-      // siblings enter/leave, so content never stretches mid-reflow.
-      layout="position"
-      variants={rowVariants}
-      exit={{ opacity: 0, scale: 0.97 }}
-      transition={{ duration: 0.2, ease: [0.2, 0.85, 0.3, 1] }}
       onClick={() => onOpen(m)}
       onKeyDown={(e) => {
         // A div[role=button] does not natively activate on Enter/Space the way
@@ -292,6 +277,6 @@ export function MessageRow({
           ) : null}
         </div>
       ) : null}
-    </motion.div>
+    </div>
   );
 }

@@ -31,6 +31,7 @@
   "homepage": "https://github.com/JacintoDesign/vibemail-backend#readme",
   "dependencies": {
     "@supabase/supabase-js": "^2.106.1",
+    "@tanstack/react-virtual": "^3.14.3",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^25.9.1",
     "googleapis": "^172.0.0",
