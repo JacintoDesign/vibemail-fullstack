@@ -213,9 +213,11 @@ function SegRow<T extends string>({
   );
 }
 
-// Minimum width for the settings popup. ~210px is the point where "Keyboard
-// shortcuts" stops wrapping inside its fixed-height button; 224 leaves headroom.
-const MIN_PANEL_WIDTH = 224;
+// Minimum width of the expanded nav panel. Chosen so its content column — which
+// the Compose button and the settings popup both span — is wide enough to keep
+// the popup's widest row ("Keyboard shortcuts") on one line without the popup
+// spilling outside the nav. (248 − 24px horizontal padding = 224px content.)
+export const SIDEBAR_EXPANDED_MIN_W = 248;
 
 function SettingsPanel({
   theme,
@@ -271,10 +273,10 @@ function SettingsPanel({
     setPos({
       bottom: window.innerHeight - r.top + 12,
       left: Math.max(8, r.left),
-      // Floor the width so the panel's widest row ("Keyboard shortcuts", whose
-      // button has a fixed height and would otherwise wrap) stays on one line
-      // even when the expanded sidebar is dragged narrow.
-      width: Math.max(widthOverride ?? r.width, MIN_PANEL_WIDTH),
+      // Expanded: match the gear anchor (= the nav's content width, same as the
+      // Compose button) so the popup sits inside the nav. Collapsed: widthOverride
+      // floats it wider since the rail itself is only ~56px.
+      width: widthOverride ?? r.width,
     });
   }, [anchorRef, widthOverride]);
 
@@ -548,10 +550,10 @@ export function Sidebar({
   }, [settingsOpen]);
 
   const asideStyle: CSSProperties = {
-    width: rail ? 56 : mobile ? "100%" : width || 224,
+    width: rail ? 56 : mobile ? "100%" : Math.max(width || SIDEBAR_EXPANDED_MIN_W, SIDEBAR_EXPANDED_MIN_W),
     flex: mobile ? 1 : undefined,
     flexShrink: rail ? 0 : 1,
-    minWidth: rail ? 56 : mobile ? 0 : 180,
+    minWidth: rail ? 56 : mobile ? 0 : SIDEBAR_EXPANDED_MIN_W,
     height: "100%",
     display: "flex",
     flexDirection: "column",

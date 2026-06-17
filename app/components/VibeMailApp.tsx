@@ -13,7 +13,7 @@ import { MessageList } from "@/components/mail/MessageList";
 import type { ReadFilter } from "@/components/mail/MessageList";
 import { CollapsedRail, Resizer } from "@/components/mail/PanelChrome";
 import { ReadingPane } from "@/components/mail/ReadingPane";
-import { Sidebar } from "@/components/mail/Sidebar";
+import { Sidebar, SIDEBAR_EXPANDED_MIN_W } from "@/components/mail/Sidebar";
 import { ThreadWindow, type PopoutWin } from "@/components/mail/ThreadWindow";
 import { Icon } from "@/components/ds";
 import { ApiError } from "@/lib/api-client";
@@ -75,7 +75,7 @@ const VM_EMPTY_TEXT: Record<string, string> = {
 };
 
 const VM_LAYOUT_DEFAULTS = {
-  sidebarW: 240,
+  sidebarW: SIDEBAR_EXPANDED_MIN_W,
   sidebarRail: false,
   listW: 450,
   listCollapsed: false,
@@ -135,7 +135,7 @@ export function VibeMailApp() {
     const rect = rootRef.current.getBoundingClientRect();
     const w = clientX - rect.left;
     if (w < 140) patchLayout({ sidebarRail: true });
-    else patchLayout({ sidebarRail: false, sidebarW: Math.min(Math.max(w, 216), 320) });
+    else patchLayout({ sidebarRail: false, sidebarW: Math.min(Math.max(w, SIDEBAR_EXPANDED_MIN_W), 320) });
   };
   const resizeList = (clientX: number) => {
     if (!rootRef.current) return;
