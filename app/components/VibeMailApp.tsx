@@ -224,6 +224,12 @@ export function VibeMailApp() {
   // patchAction reconciles them itself once the response lands.
   const pendingPatchRef = useRef<Set<string>>(new Set());
 
+  // Set when a background backfill call fails so the auto-sync effect stops
+  // re-firing — otherwise a persistent error (e.g. a server 4xx/5xx) would make
+  // it hammer the endpoint in a tight loop. Cleared on folder switch / refresh
+  // (loadFirstPage) and on an explicit "Load more" so the user can retry.
+  const autoSyncFailedRef = useRef(false);
+
   const loadFirstPage = useCallback(async () => {
     const myId = ++reqIdRef.current;
     setLoading(true);
@@ -239,6 +245,7 @@ export function VibeMailApp() {
       // Reset the older-history backfill walk for the freshly loaded view.
       setBackfillCursor(null);
       setBackfillExhausted(false);
+      autoSyncFailedRef.current = false;
     } catch (e) {
       if (reqIdRef.current !== myId) return;
       setMessages([]);
@@ -300,6 +307,8 @@ export function VibeMailApp() {
     // from Gmail, then read the newly-synced rows starting just past the
     // oldest one currently shown (endCursor) and append them.
     if (!canBackfill || !endCursor) return;
+    // An explicit call clears a prior background failure so the user can retry.
+    autoSyncFailedRef.current = false;
     setLoadingMore(true);
     try {
       // Cap the run at the real inbox size so a full sync terminates naturally.
@@ -314,6 +323,9 @@ export function VibeMailApp() {
         if (page.endCursor) setEndCursor(page.endCursor);
       }
     } catch (e) {
+      // Latch the failure so the background auto-sync effect stops re-firing;
+      // an explicit "Load more" or a folder switch clears it to allow a retry.
+      autoSyncFailedRef.current = true;
       setError(errMessage(e));
     } finally {
       setLoadingMore(false);
@@ -330,7 +342,7 @@ export function VibeMailApp() {
   useEffect(() => {
     if (searchMode || filter !== "all") return;
     if (loading || loadingMore) return;
-    if (backfillExhausted) return;
+    if (backfillExhausted || autoSyncFailedRef.current) return;
     if (inboxTarget === null || messages.length >= inboxTarget) return;
     loadMore();
   }, [

@@ -26,15 +26,21 @@ export interface MessagePage {
 
 // Fallback cap when the true inbox size isn't known yet (no /labels response).
 const BACKFILL_MAX = 500;
+// The server caps a single backfill run at 5000 (and requires >= 1) — see
+// POST /api/v1/sync/backfill. A real inbox total above that would otherwise be
+// passed straight through as `max` and rejected with 422 INVALID_LIMIT.
+const BACKFILL_MAX_CEILING = 5000;
 
 /**
  * Pull the next batch of older inbox history from Gmail into the DB. Drives the
  * inbox "Load more" / background auto-sync once the locally-paged rows run out.
  * `cursor` resumes a prior run; omit it to start fresh. `max` bounds the whole
- * run — pass the real inbox total so a full auto-sync terminates naturally.
+ * run — pass the real inbox total so a full auto-sync terminates naturally; it
+ * is clamped to the server's 1..5000 range so a large mailbox can't 422.
  */
 export function backfillOlderInbox(cursor?: string, max: number = BACKFILL_MAX): Promise<BackfillResult> {
-  return backfillInbox({ max, cursor });
+  const safeMax = Math.min(BACKFILL_MAX_CEILING, Math.max(1, Math.floor(max)));
+  return backfillInbox({ max: safeMax, cursor });
 }
 
 /**
