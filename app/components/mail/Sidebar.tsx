@@ -231,6 +231,7 @@ function SettingsPanel({
   panelRef,
   mobile,
   onClose,
+  widthOverride,
 }: Pick<
   SidebarProps,
   | "theme"
@@ -251,6 +252,10 @@ function SettingsPanel({
   panelRef: React.RefObject<HTMLDivElement | null>;
   mobile?: boolean;
   onClose: () => void;
+  /** When the sidebar is collapsed to a rail the gear anchor is only ~44px wide,
+   *  which would squish the panel. Pass the expanded-sidebar width so the panel
+   *  keeps its normal size; omit it to track the anchor's measured width. */
+  widthOverride?: number;
 }) {
   const { signOut } = useAuth();
   const [signOutHover, setSignOutHover] = useState(false);
@@ -262,9 +267,9 @@ function SettingsPanel({
     setPos({
       bottom: window.innerHeight - r.top + 12,
       left: Math.max(8, r.left),
-      width: r.width,
+      width: widthOverride ?? r.width,
     });
-  }, [anchorRef]);
+  }, [anchorRef, widthOverride]);
 
   if (!pos) return createPortal(<div ref={panelRef} />, document.body);
 
@@ -721,6 +726,10 @@ export function Sidebar({
               panelRef={panelRef}
               mobile={mobile}
               onClose={() => setSettingsOpen(false)}
+              // Collapsed rail: size the panel to the expanded sidebar's inner
+              // width (full width minus its 12px horizontal padding either side)
+              // instead of the narrow rail gear.
+              widthOverride={rail ? (width || 224) - 24 : undefined}
             />
           )}
           <button
