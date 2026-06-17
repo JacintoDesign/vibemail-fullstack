@@ -1,7 +1,7 @@
 import { gmail_v1 } from 'googleapis';
 import { Message, MessageStatus, Attachment } from '../types/message';
 import { ProviderError } from '../types/provider';
-import { getClient } from '../db';
+import { getClient, withWriteRetry } from '../db';
 
 // ── Status derivation ────────────────────────────────────────────────────────
 
@@ -259,9 +259,9 @@ export async function upsertMessages(
   // client rejects it as an excess property. Same pattern as the PATCH handler.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows = messages.map(toRow) as any[];
-  const { error } = await getClient()
-    .from('messages')
-    .upsert(rows, { onConflict: 'gmail_id' });
+  const { error } = await withWriteRetry(() =>
+    getClient().from('messages').upsert(rows, { onConflict: 'gmail_id' }),
+  );
 
   if (error) {
     throw new ProviderError('SYNC_UPSERT_FAILED', error.message, error);

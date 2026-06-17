@@ -39,6 +39,49 @@ export function getClient(): SupabaseClient<Database> {
   return _client;
 }
 
+// ── Transient-failure retry ──────────────────────────────────────────────────
+
+const RETRY_ATTEMPTS = 3;
+const RETRY_BASE_MS = 250;
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * True for the dropped-socket / DNS-hiccup class of failures that the Supabase
+ * client's underlying fetch raises under load (e.g. a long backfill hammering
+ * the DB). These are safe to retry; a real constraint or auth error is not.
+ */
+function isTransientError(err: unknown): boolean {
+  const message = String((err as { message?: string } | null)?.message ?? err ?? '');
+  return /fetch failed|socket|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|UND_ERR|network/i.test(
+    message,
+  );
+}
+
+/**
+ * Run a Supabase write, retrying transient network failures with exponential
+ * backoff. Network errors surface either as a thrown exception or as a returned
+ * `{ error }`, so both are handled. Returns the same shape the call returned, so
+ * callers keep their existing `if (error) throw ProviderError(...)` handling and
+ * the typed error code is preserved for genuine (non-transient) failures.
+ */
+export async function withWriteRetry<T extends { error: unknown }>(
+  run: () => PromiseLike<T>,
+): Promise<T> {
+  let lastResult: T | undefined;
+  for (let attempt = 0; attempt < RETRY_ATTEMPTS; attempt++) {
+    try {
+      const result = await run();
+      if (!result.error || !isTransientError(result.error)) return result;
+      lastResult = result;
+    } catch (err) {
+      if (!isTransientError(err) || attempt === RETRY_ATTEMPTS - 1) throw err;
+    }
+    if (attempt < RETRY_ATTEMPTS - 1) await sleep(RETRY_BASE_MS * 2 ** attempt);
+  }
+  return lastResult as T;
+}
+
 // ── Row type aliases ─────────────────────────────────────────────────────────
 
 /** Full users row as returned by SELECT *. */
@@ -89,9 +132,9 @@ export async function upsertMessage(
                     : undefined,
   };
 
-  const { error } = await getClient()
-    .from('messages')
-    .upsert(row, { onConflict: 'gmail_id' });
+  const { error } = await withWriteRetry(() =>
+    getClient().from('messages').upsert(row, { onConflict: 'gmail_id' }),
+  );
 
   if (error) {
     throw new ProviderError('SYNC_UPSERT_FAILED', error.message, error);
