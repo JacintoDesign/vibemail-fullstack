@@ -109,6 +109,23 @@ export function AuthSplash({ onSignIn }: { onSignIn: () => void }) {
           </button>
         )}
       </div>
+
+      {ready ? (
+        <a
+          href="/demo"
+          style={{
+            marginTop: 14,
+            fontFamily: "var(--font-mono)",
+            fontSize: "var(--text-caption, 12px)",
+            color: "var(--text-muted)",
+            textDecoration: "none",
+            borderBottom: "1px solid var(--border-strong)",
+            paddingBottom: 1,
+          }}
+        >
+          or explore the demo — no sign-in →
+        </a>
+      ) : null}
     </div>
   );
 }

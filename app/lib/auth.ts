@@ -3,6 +3,8 @@
 // /auth/callback?token=<jwt>) stores the real JWT here. All reads are
 // SSR-safe (guard `window`).
 
+import { DEMO_ACCOUNT, isDemo } from "./demo";
+
 const TOKEN_KEY = "vm-token";
 // Survives the hard redirect in forceSignOut so the sign-in surface can explain
 // why the user landed back there (read once, then cleared).
@@ -55,6 +57,7 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
 
 /** The signed-in account's email, read from the JWT `email` claim. */
 export function getAccountEmail(): string {
+  if (isDemo()) return DEMO_ACCOUNT;
   const token = getToken();
   if (!token) return "";
   const payload = decodeJwtPayload(token);

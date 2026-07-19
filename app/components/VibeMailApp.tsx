@@ -42,6 +42,7 @@ import {
   reconcileInboxLabels,
 } from "@/lib/data-source";
 import type { CSSVars, Message } from "@/lib/types";
+import { isDemo } from "@/lib/demo";
 import { useSettings } from "@/providers/SettingsProvider";
 
 /** Order-insensitive equality for two label-id sets — used by the live poll to
@@ -213,6 +214,9 @@ export function VibeMailApp() {
   const [draft, setDraft] = useState<Message | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  // Set when a demo visitor tries to send — surfaces the large "sending is
+  // locked" notice instead of hitting the (mocked) send endpoint.
+  const [demoNotice, setDemoNotice] = useState(false);
 
   // ── Data loading (folder / search) ────────────────────────────────────────
   // A monotonically increasing request id discards responses from superseded
@@ -957,6 +961,13 @@ export function VibeMailApp() {
     showToast("That draft no longer exists in Gmail — removed it.", "error");
   };
   const handleSend = async (payload: ComposePayload, count: number) => {
+    // Demo mode: let the visitor go through the full compose motion, then stop
+    // at the door — nothing is actually sent, and a large notice explains why.
+    if (isDemo()) {
+      closeCompose();
+      setDemoNotice(true);
+      return;
+    }
     if (draft) {
       // Editing an existing draft → persist edits, then send it via drafts.send.
       // drafts.update assigns a NEW Gmail message id, so send that one.
@@ -1240,6 +1251,151 @@ export function VibeMailApp() {
     </div>
   ) : null;
 
+  // Persistent "you're in the demo" badge. Rendered only on the /demo route, and
+  // hidden while composing so it can't sit over the drawer's Send/Attach bar.
+  const demoBadgeEl =
+    isDemo() && !composeOpen && !demoNotice ? (
+      <a
+        href="/"
+        title="Sign in to use your real mailbox"
+        style={{
+          position: "absolute",
+          bottom: 16,
+          right: 16,
+          zIndex: 45,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "7px 13px",
+          borderRadius: "var(--radius-full, 999px)",
+          background: "var(--glass-drawer)",
+          border: "1px solid var(--border-strong)",
+          WebkitBackdropFilter: "var(--glass-blur-3)",
+          backdropFilter: "var(--glass-blur-3)",
+          boxShadow: "var(--shadow-2)",
+          fontFamily: "var(--font-mono)",
+          fontSize: "var(--text-caption, 12px)",
+          color: "var(--text-primary)",
+          textDecoration: "none",
+        }}
+      >
+        <span
+          aria-hidden
+          style={{
+            width: 7,
+            height: 7,
+            borderRadius: "var(--radius-full, 999px)",
+            background: "var(--accent, var(--success, #4ade80))",
+          }}
+        />
+        Demo mode — sample data ·{" "}
+        <span style={{ color: "var(--text-muted)" }}>Sign in&nbsp;→</span>
+      </a>
+    ) : null;
+
+  const demoNoticeEl = demoNotice ? (
+    <div
+      role="alertdialog"
+      aria-modal="true"
+      aria-label="Demo mode"
+      onClick={() => setDemoNotice(false)}
+      style={{
+        position: "absolute",
+        inset: 0,
+        zIndex: 70,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+        background: "rgba(0,0,0,0.45)",
+        WebkitBackdropFilter: "var(--glass-blur-2)",
+        backdropFilter: "var(--glass-blur-2)",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          textAlign: "center",
+          gap: 16,
+          maxWidth: 440,
+          width: "100%",
+          padding: "32px 28px",
+          background: "var(--glass-drawer)",
+          border: "1px solid var(--border-strong)",
+          borderRadius: "var(--radius-md, 16px)",
+          WebkitBackdropFilter: "var(--glass-blur-3)",
+          backdropFilter: "var(--glass-blur-3)",
+          boxShadow: "var(--shadow-3)",
+          fontFamily: "var(--font-mono)",
+          color: "var(--text-primary)",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: 52,
+            height: 52,
+            borderRadius: "var(--radius-full)",
+            background: "var(--glass-2)",
+            border: "1px solid var(--border-strong)",
+          }}
+        >
+          <Icon name="mail" size={24} color="var(--accent, currentColor)" />
+        </div>
+        <div style={{ fontSize: "var(--text-title, 19px)", fontWeight: 700, lineHeight: 1.3 }}>
+          You&apos;re in the demo
+        </div>
+        <div style={{ fontSize: "var(--text-body)", lineHeight: 1.5, color: "var(--text-muted)" }}>
+          Sending is turned off here — this is a sample mailbox so you can explore
+          freely. Real sending, live Gmail sync, and everything else unlock once
+          you sign in with Google.
+        </div>
+        <div style={{ display: "flex", gap: 10, marginTop: 4, flexWrap: "wrap", justifyContent: "center" }}>
+          <a
+            href="/"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "10px 18px",
+              borderRadius: "var(--radius-sm)",
+              background: "var(--accent, var(--text-primary))",
+              color: "var(--navy, #0b1020)",
+              fontFamily: "var(--font-mono)",
+              fontSize: "var(--text-body)",
+              fontWeight: 600,
+              textDecoration: "none",
+              border: "1px solid transparent",
+            }}
+          >
+            Sign in with Google
+          </a>
+          <button
+            type="button"
+            onClick={() => setDemoNotice(false)}
+            style={{
+              padding: "10px 18px",
+              borderRadius: "var(--radius-sm)",
+              background: "transparent",
+              color: "var(--text-muted)",
+              border: "1px solid var(--border-strong)",
+              fontFamily: "var(--font-mono)",
+              fontSize: "var(--text-body)",
+              cursor: "pointer",
+            }}
+          >
+            Keep exploring
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   // ── Mobile shell ──────────────────────────────────────────────────────────
   if (isMobile) {
     const mobileRootStyle: CSSVars = {
@@ -1365,6 +1521,8 @@ export function VibeMailApp() {
         />
 
         {toastEl}
+        {demoBadgeEl}
+        {demoNoticeEl}
         {helpOpen ? <KeyboardHelp onClose={() => setHelpOpen(false)} /> : null}
       </div>
     );
@@ -1522,6 +1680,8 @@ export function VibeMailApp() {
         />
 
         {toastEl}
+        {demoBadgeEl}
+        {demoNoticeEl}
         {helpOpen ? <KeyboardHelp onClose={() => setHelpOpen(false)} /> : null}
       </main>
     </div>

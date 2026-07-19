@@ -3,6 +3,8 @@
 // /api/v1 base path, and surfaces the CONTRACT error envelope.
 
 import { forceSignOut, getToken } from "./auth";
+import { isDemo } from "./demo";
+import { demoFetch } from "./demo-store";
 
 const API_BASE = "/api/v1";
 
@@ -30,6 +32,11 @@ export class ApiError extends Error {
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  // On the public /demo route, serve every call from the in-memory mock so the
+  // app is fully explorable with no sign-in and no network. Scoped to the path,
+  // so the real app at "/" is never affected.
+  if (isDemo()) return demoFetch<T>(path, init);
+
   const token = getToken();
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
