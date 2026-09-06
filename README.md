@@ -314,6 +314,7 @@ Schema SQL lives in `migrations/`, applied in order:
 
 - `001_initial_schema.sql` — `users` + `messages` tables, `updated_at` triggers, indexes, RLS policies.
 - `002_add_status_and_draft_id.sql` — adds `status` + `draft_id`, backfills `status` from existing `label_ids`, adds supporting indexes.
+- `003_message_chunks.sql` — enables pgvector, creates `message_chunks` (384-d embeddings, unique `(message_id, chunk_index)`, HNSW inner-product index, RLS).
 
 Every migration is **idempotent** (`IF NOT EXISTS`, guarded policy creation, non-overlapping backfills) — running it twice is a no-op with no data loss.
 
