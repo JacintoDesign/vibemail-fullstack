@@ -6,6 +6,7 @@ import { errorResponse, handleError } from '../../middleware/error';
 import { ProviderError } from '../../types/provider';
 import { loadOAuth2Client } from '../../providers/gmail/auth';
 import { normalizeMessage } from '../../sync/normalize';
+import { ingestMessageChunks } from '../../memory/ingest';
 import type { Message } from '../../types/message';
 
 /**
@@ -129,13 +130,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       created_at:   new Date(Number(normalized.internalDate) || Date.now()).toISOString(),
     };
 
-    const { error: dbError } = await supabase
+    const { data: persisted, error: dbError } = await supabase
       .from('messages')
-      .upsert(insertRow, { onConflict: 'gmail_id' });
+      .upsert(insertRow, { onConflict: 'gmail_id' })
+      .select('id')
+      .single();
 
-    if (dbError) {
-      throw new ProviderError('GMAIL_DRAFT_FAILED', dbError.message, dbError);
+    if (dbError || !persisted) {
+      throw new ProviderError('GMAIL_DRAFT_FAILED', dbError?.message ?? 'Draft upsert returned no id', dbError);
     }
+
+    await ingestMessageChunks({
+      messageId: persisted.id,
+      userId:     payload.sub,
+      sender:     normalized.from,
+      subject:    normalized.subject,
+      body:       normalized.bodyPlain ?? '',
+    });
 
     const message: Message = {
       ...normalized,

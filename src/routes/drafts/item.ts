@@ -7,6 +7,7 @@ import { ProviderError } from '../../types/provider';
 import { loadOAuth2Client } from '../../providers/gmail/auth';
 import { resolveDraftId, isGmailNotFound } from '../../providers/gmail/drafts';
 import { rowToMessage, DbMessageRow } from '../../sync/normalize';
+import { ingestMessageChunks } from '../../memory/ingest';
 
 /**
  * PATCH  /api/v1/drafts/:id — update draft content
@@ -144,6 +145,14 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse): Promise<vo
     if (updateError) {
       throw new ProviderError('GMAIL_DRAFT_FAILED', updateError.message, updateError);
     }
+
+    await ingestMessageChunks({
+      messageId: row.id,
+      userId:    payload.sub,
+      sender:    from,
+      subject:   newSubject,
+      body:      newBody,
+    });
 
     // Return the updated message shape (with the new gmail_id reflected).
     const updated: DbMessageRow = {

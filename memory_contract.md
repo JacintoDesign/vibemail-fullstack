@@ -38,6 +38,12 @@ These are **character** counts, not token counts. We do not tokenize to measure 
 
 GTE-small is the only embedding model this platform runs natively. Swapping it for another model later means self-hosting.
 
+### Pipeline
+
+The `/embed` edge function takes **one string** and returns **one 384-dimension vector**. It does not chunk mail and it does not write to the database.
+
+Ingestion splits the message first (rules above), then calls `/embed` **once per chunk in parallel** (`Promise.all`). Each function run does a single forward pass and stays under the 2-second CPU limit.
+
 ---
 
 ## 2. Chunks In, Messages Out
@@ -78,7 +84,7 @@ Both the result count and the threshold are **starting values**, not settled num
 | Label change | None |
 | Read-status flip | None |
 
-**On insert**, a message is chunked and embedded before it can be retrieved.
+**On insert**, a message is chunked in the application, each chunk is embedded via `/embed` in parallel, and the vectors are written to `message_chunks` before the message can be retrieved.
 
 **On an edit** to the subject or body, delete all of that message's chunks and rebuild them from scratch. This is not an update in place, because the new body may split into a different number of chunks.
 

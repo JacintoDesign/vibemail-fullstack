@@ -2,6 +2,7 @@ import { gmail_v1 } from 'googleapis';
 import { Message, MessageStatus, Attachment } from '../types/message';
 import { ProviderError } from '../types/provider';
 import { getClient, withWriteRetry } from '../db';
+import { ingestChangedMessages, snapshotMessageContent } from '../memory/ingest';
 
 // ── Status derivation ────────────────────────────────────────────────────────
 
@@ -254,6 +255,16 @@ export function rowToMessage(row: DbMessageRow): Message {
 export async function upsertMessages(
   messages: Array<Omit<Message, 'id' | 'createdAt' | 'updatedAt'>>,
 ): Promise<void> {
+  if (messages.length === 0) return
+
+  const first = messages[0]
+  if (!first) return
+
+  const before = await snapshotMessageContent(
+    first.userId,
+    messages.map((m) => m.gmailId),
+  )
+
   // Cast required: `attachments` is a new jsonb column added by the schema
   // migration and not yet reflected in the Supabase generated types, so the
   // client rejects it as an excess property. Same pattern as the PATCH handler.
@@ -266,4 +277,6 @@ export async function upsertMessages(
   if (error) {
     throw new ProviderError('SYNC_UPSERT_FAILED', error.message, error);
   }
+
+  await ingestChangedMessages(messages, before)
 }

@@ -2,6 +2,7 @@ import { google } from 'googleapis';
 import { loadOAuth2Client } from '../providers/gmail/auth';
 import { normalizeMessage, deriveStatus } from './normalize';
 import { upsertMessage, getInboxMessageRows, updateMessageLabels } from '../db';
+import { ingestChangedMessages, snapshotMessageContent } from '../memory/ingest';
 import { ProviderError } from '../types/provider';
 
 const MAX_INITIAL_SYNC = 50;
@@ -57,7 +58,10 @@ export async function runInitialSync(userId: string): Promise<void> {
         format: 'FULL',
       });
 
-      await upsertMessage(normalizeMessage(msg, userId));
+      const normalized = normalizeMessage(msg, userId);
+      const before = await snapshotMessageContent(userId, [normalized.gmailId]);
+      await upsertMessage(normalized);
+      await ingestChangedMessages([normalized], before);
       fetched++;
     }
 
@@ -172,7 +176,10 @@ export async function runBackfill(
           format: 'FULL',
         });
 
-        await upsertMessage(normalizeMessage(msg, userId));
+        const normalized = normalizeMessage(msg, userId);
+        const before = await snapshotMessageContent(userId, [normalized.gmailId]);
+        await upsertMessage(normalized);
+        await ingestChangedMessages([normalized], before);
         totalSynced++;
         syncedThisCall++;
       }
