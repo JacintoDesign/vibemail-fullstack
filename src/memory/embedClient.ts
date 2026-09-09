@@ -5,18 +5,26 @@ interface EmbedResponse {
   error?: { code?: string; message?: string }
 }
 
+const RETRY_ATTEMPTS = 4
+const RETRY_BASE_MS = 500
+
 /**
  * Call the embed edge function with one string. Returns one 384-d vector.
- * Retries once: cold isolates sometimes return the transformers.js dtype
- * warning as a 400 instead of a vector.
+ * Retries: cold isolates sometimes return the transformers.js dtype warning
+ * as a 400; 503/546 are CPU/overload and usually succeed on a later isolate.
  */
 export async function embedText(text: string): Promise<number[]> {
-  try {
-    return await embedTextOnce(text)
-  } catch (err) {
-    if (!isDtypeWarning(err)) throw err
-    return embedTextOnce(text)
+  let lastErr: unknown
+  for (let attempt = 0; attempt < RETRY_ATTEMPTS; attempt++) {
+    try {
+      return await embedTextOnce(text)
+    } catch (err) {
+      lastErr = err
+      if (attempt === RETRY_ATTEMPTS - 1 || !isRetryableEmbedError(err)) throw err
+      await sleep(RETRY_BASE_MS * 2 ** attempt)
+    }
   }
+  throw lastErr
 }
 
 async function embedTextOnce(text: string): Promise<number[]> {
@@ -55,6 +63,7 @@ async function embedTextOnce(text: string): Promise<number[]> {
     throw new ProviderError(
       payload.error?.code ?? 'EMBED_FAILED',
       payload.error?.message ?? `embed failed with status ${res.status}`,
+      { status: res.status },
     )
   }
 
@@ -67,6 +76,18 @@ async function embedTextOnce(text: string): Promise<number[]> {
   }
 
   return embedding
+}
+
+function isRetryableEmbedError(err: unknown): boolean {
+  if (isDtypeWarning(err)) return true
+  if (!(err instanceof ProviderError)) return false
+  const status = (err.details as { status?: unknown } | undefined)?.status
+  if (status === 502 || status === 503 || status === 504 || status === 546) return true
+  return /status 546|status 503|WORKER_RESOURCE_LIMIT|non-JSON \(50[2346]\)/.test(err.message)
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function isDtypeWarning(value: unknown): boolean {

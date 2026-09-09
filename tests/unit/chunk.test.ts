@@ -24,6 +24,19 @@ describe('splitBody', () => {
     expect(slices[0]).toHaveLength(CHUNK_SIZE)
     expect(slices[1]).toBe(body.slice(CHUNK_SIZE - CHUNK_OVERLAP))
   })
+
+  it('does not split a surrogate pair across chunks', () => {
+    const emoji = '😀'
+    const body = 'a'.repeat(CHUNK_SIZE - 1) + emoji + 'z'.repeat(50)
+    const slices = splitBody(body)
+    expect(slices.length).toBeGreaterThan(1)
+    for (const slice of slices) {
+      const unpaired =
+        /[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(slice) ||
+        /(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(slice)
+      expect(unpaired).toBe(false)
+    }
+  })
 })
 
 describe('composeChunk', () => {
@@ -31,6 +44,13 @@ describe('composeChunk', () => {
     expect(composeChunk('Ada <ada@example.com>', 'Hello', 'body text')).toBe(
       'Ada <ada@example.com>\nHello\n\nbody text',
     )
+  })
+
+  it('replaces unpaired surrogates so the stored text is valid JSON', () => {
+    const loneLow = String.fromCharCode(0xde00)
+    const text = composeChunk('Ann', 'Hi', loneLow)
+    expect(text).toContain('\uFFFD')
+    expect(text).not.toContain(loneLow)
   })
 })
 

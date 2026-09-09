@@ -105,6 +105,8 @@ export async function ingestChangedMessages(
   )
 }
 
+const EMBED_CONCURRENCY = 3
+
 /**
  * Split one message, embed every chunk in parallel, then replace rows in
  * message_chunks. Each embed isolate sees a single string.
@@ -112,7 +114,7 @@ export async function ingestChangedMessages(
 export async function ingestMessageChunks(input: IngestMessageInput): Promise<void> {
   const chunks = chunkMessage(input.sender, input.subject, input.body)
 
-  const embeddings = await Promise.all(chunks.map((chunk) => embedText(chunk.text)))
+  const embeddings = await mapPool(chunks, EMBED_CONCURRENCY, (chunk) => embedText(chunk.text))
 
   const { error: deleteError } = await withWriteRetry(() =>
     getClient().from('message_chunks').delete().eq('message_id', input.messageId),
@@ -141,4 +143,26 @@ export async function ingestMessageChunks(input: IngestMessageInput): Promise<vo
   if (insertError) {
     throw new ProviderError('CHUNK_INSERT_FAILED', insertError.message, insertError)
   }
+}
+
+async function mapPool<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  if (items.length === 0) return []
+  const results: R[] = new Array(items.length)
+  let next = 0
+  async function worker(): Promise<void> {
+    for (;;) {
+      const i = next++
+      if (i >= items.length) return
+      const item = items[i]
+      if (item === undefined) return
+      results[i] = await fn(item)
+    }
+  }
+  const workers = Math.min(Math.max(1, concurrency), items.length)
+  await Promise.all(Array.from({ length: workers }, () => worker()))
+  return results
 }

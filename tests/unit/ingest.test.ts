@@ -139,6 +139,22 @@ describe('ingestMessageChunks', () => {
     expect(rows[0]?.chunk_text).not.toContain('first version')
     expect(rows[0]?.user_id).toBe(userId)
   })
+
+  it('stores chunks when an emoji sits on a 1500-character boundary', async () => {
+    const msg = await seedMessage(userId, { subject: 'Emoji' })
+    const body = 'a'.repeat(CHUNK_SIZE - 1) + '😀' + 'z'.repeat(50)
+
+    await ingestMessageChunks({
+      messageId: msg.id,
+      userId,
+      sender:  'Ann',
+      subject: 'Emoji',
+      body,
+    })
+
+    const rows = await chunksFor(msg.id)
+    expect(rows.length).toBeGreaterThan(1)
+  })
 })
 
 describe('ingestChangedMessages', () => {
