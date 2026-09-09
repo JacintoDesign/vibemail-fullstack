@@ -1,0 +1,121 @@
+import { reason } from '../reason'
+import type { Message } from '../types/message'
+import type { ReasonContextMessage } from '../types/reason'
+import { searchByMeaning } from './retrieve'
+
+/**
+ * Wider than search (`MATCH_COUNT` = 8). Digest is breadth — every matching
+ * newsletter stays a source, including several that covered the same launch.
+ */
+export const DIGEST_COUNT = 20
+
+/**
+ * Slightly looser than MATCH_THRESHOLD so near-miss coverage still comes in.
+ * Still a `<#>` distance: lower is better.
+ */
+export const DIGEST_THRESHOLD = -0.75
+
+/** Short excerpt sent to the reasoner — not the whole newsletter. */
+export const EXCERPT_CHARS = 500
+
+const DIGEST_SYSTEM = [
+  'Write a short brief on the topic using only the Context messages.',
+  'Cover what has been said, where the sources agree, and any specific detail worth noting even if only one source mentioned it.',
+  'Name the newsletter or sender each point came from.',
+  'Cite each source inline as [n] Name using its Context number, e.g. [1] TLDR Design.',
+  'Do not add a source list, chips, or extra links after the brief.',
+  'Do not include email addresses, dates, or raw ids in citations.',
+  'Write multiple short paragraphs. A little longer than a one-paragraph search answer, not an essay.',
+  'If the brief is not in Context, say so. Do not guess.',
+].join(' ')
+
+export interface DigestBrief {
+  /** Model brief, or a newsletter list when the provider could not run. */
+  text: string | null
+  /** True when the list was used because the provider hit quota / was unavailable. */
+  unavailable: boolean
+}
+
+/**
+ * Messages about `topic` across the signed-in user's archive. Wider than
+ * search, not unique'd by sender, trash and drafts dropped. Weak hits never
+ * leave match_messages.
+ */
+export async function messagesForDigest(userId: string, topic: string): Promise<Message[]> {
+  const hits = await searchByMeaning(userId, topic, {
+    matchCount: DIGEST_COUNT,
+    matchThreshold: DIGEST_THRESHOLD,
+  })
+  return hits.filter((m) => m.status !== 'trash' && m.status !== 'draft')
+}
+
+/**
+ * Ground a topic brief in the retrieved messages. Callers still show the
+ * list (MEMORY_CONTRACT.md §5) when the provider is unavailable — the brief
+ * then names every matching newsletter instead of calling it an error.
+ */
+export async function digestFromMessages(
+  topic: string,
+  messages: Message[],
+): Promise<DigestBrief> {
+  if (messages.length === 0) return { text: null, unavailable: false }
+
+  try {
+    const result = await reason({
+      systemInstruction: DIGEST_SYSTEM,
+      prompt: topic,
+      context: messages.map(toExcerptContext),
+    })
+    if (!result.available) return { text: fallbackDigest(messages), unavailable: true }
+    const text = result.text?.trim()
+    return { text: text ? text : fallbackDigest(messages), unavailable: !text }
+  } catch {
+    return { text: fallbackDigest(messages), unavailable: true }
+  }
+}
+
+/** Clip a message to a short excerpt for the reasoner. */
+export function excerptOf(message: Message): string {
+  const raw = (message.bodyPlain?.trim() || message.snippet || '').replace(/\s+/g, ' ')
+  if (raw.length <= EXCERPT_CHARS) return raw
+  const cut = raw.slice(0, EXCERPT_CHARS)
+  const lastSpace = cut.lastIndexOf(' ')
+  const clipped = (lastSpace > EXCERPT_CHARS * 0.6 ? cut.slice(0, lastSpace) : cut).trim()
+  return `${clipped}…`
+}
+
+/** Display name from an RFC 2822 From header — the newsletter, not the address. */
+export function newsletterName(from: string): string {
+  const raw = from.trim()
+  const angled = raw.match(/^(.*?)<([^>]+)>$/)
+  if (angled) {
+    const name = angled[1].trim().replace(/^"|"$/g, '')
+    return name || angled[2].trim()
+  }
+  if (raw.includes('@')) return raw.split('@')[0] || raw
+  return raw || '(unknown)'
+}
+
+/**
+ * Fallback when the model cannot run: every matching newsletter, not collapsed
+ * by sender. Three issues from three sources all appear.
+ */
+export function fallbackDigest(messages: Message[]): string {
+  const lines = messages.map((m, i) => {
+    const name = newsletterName(m.from)
+    const subject = m.subject.trim() || '(no subject)'
+    return `- [${i + 1}] ${name} — ${subject}`
+  })
+  return `Couldn't write a brief. Matching newsletters:\n\n${lines.join('\n')}`
+}
+
+function toExcerptContext(message: Message): ReasonContextMessage {
+  return {
+    id: message.id,
+    from: message.from,
+    subject: message.subject,
+    date: message.date,
+    snippet: message.snippet,
+    bodyPlain: excerptOf(message),
+  }
+}

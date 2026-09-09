@@ -27,6 +27,7 @@ export interface MessageListProps {
   onRetry?: () => void;
   refreshing?: boolean;
   searchMode?: boolean;
+  digestMode?: boolean;
   query: string;
   searchAnswer?: string | null;
   /** Quiet caption when a summary could not be produced (quota, etc.). */
@@ -34,6 +35,7 @@ export interface MessageListProps {
   onQueryChange: (v: string) => void;
   onClearSearch?: () => void;
   onActivateSearch?: () => void;
+  onToggleDigest?: () => void;
   readFilter: ReadFilter;
   onReadFilter: (v: ReadFilter) => void;
   onOpen: (m: Message) => void;
@@ -341,12 +343,14 @@ export function MessageList({
   onRetry,
   refreshing,
   searchMode,
+  digestMode,
   query,
   searchAnswer,
   searchNotice,
   onQueryChange,
   onClearSearch,
   onActivateSearch,
+  onToggleDigest,
   readFilter,
   onReadFilter,
   onOpen,
@@ -417,7 +421,7 @@ export function MessageList({
             gap: 8,
           }}
         >
-          {searchMode ? "Search" : folderTitle}
+          {digestMode ? "Digest" : searchMode ? "Search" : folderTitle}
           {!searchMode && messages.length > 0 ? (
             <span
               style={{
@@ -472,13 +476,20 @@ export function MessageList({
       >
         <div style={{ flex: 1, minWidth: 0, overflow: "visible" }} onClick={onActivateSearch}>
           <Input
-            icon="search"
-            glow={searchMode}
-            placeholder="Search mail…"
+            icon={digestMode ? "digest" : "search"}
+            glow={searchMode || digestMode}
+            placeholder={digestMode ? "Digest a topic…" : "Search mail…"}
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
             onClear={searchMode ? onClearSearch : undefined}
-            trailing={<SemanticSearchHint active={needsReasoning(query)} />}
+            trailing={
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                {onToggleDigest ? (
+                  <DigestToggle active={!!digestMode} onToggle={onToggleDigest} />
+                ) : null}
+                <SemanticSearchHint active={needsReasoning(query) && !digestMode} />
+              </span>
+            }
             style={{ height: "var(--control-h)" }}
           />
         </div>
@@ -498,8 +509,12 @@ export function MessageList({
             }}
           >
             {query.trim()
-              ? `${messages.length} result${messages.length === 1 ? "" : "s"} for "${query.trim()}"`
-              : "Search by keyword, or ask a question to search by meaning…"}
+              ? digestMode
+                ? `${messages.length} source${messages.length === 1 ? "" : "s"} for "${query.trim()}"`
+                : `${messages.length} result${messages.length === 1 ? "" : "s"} for "${query.trim()}"`
+              : digestMode
+                ? "Type a topic to brief from your archive…"
+                : "Search by keyword, or ask a question to search by meaning…"}
           </span>
         </div>
       ) : null}
@@ -510,6 +525,7 @@ export function MessageList({
           messages={messages}
           onOpen={onOpen}
           mobile={mobile}
+          heading={digestMode ? "Digest" : "Answer"}
         />
       ) : searchMode && searchNotice ? (
         <div style={{ padding: "6px 10px 4px" }}>
@@ -555,9 +571,21 @@ export function MessageList({
         ) : error ? null : messages.length === 0 ? (
           <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
             <ListEmpty
-              icon={searchMode ? "search" : "inbox"}
-              text={searchMode ? "No messages match your search." : emptyText || "Your inbox is empty."}
-              hint={searchMode ? "Try a keyword, or ask a question in plain language." : emptyHint}
+              icon={searchMode ? (digestMode ? "digest" : "search") : "inbox"}
+              text={
+                searchMode
+                  ? digestMode
+                    ? "Nothing in the archive matches that topic."
+                    : "No messages match your search."
+                  : emptyText || "Your inbox is empty."
+              }
+              hint={
+                searchMode
+                  ? digestMode
+                    ? "Try a broader topic, or turn digest off to search."
+                    : "Try a keyword, or ask a question in plain language."
+                  : emptyHint
+              }
             />
           </div>
         ) : (
@@ -632,6 +660,91 @@ function SemanticSearchHint({ active }: { active: boolean }) {
         }}
       >
         <Icon name="sparkles" size={14} />
+      </button>
+      {open && coords && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              role="tooltip"
+              style={{
+                position: "fixed",
+                top: coords.top,
+                left: coords.left,
+                transform: "translateX(-100%)",
+                zIndex: 80,
+                maxWidth: 240,
+                padding: "8px 10px",
+                background: "var(--navy-raised)",
+                border: "1px solid var(--border-default)",
+                borderRadius: "var(--radius-sm)",
+                boxShadow: "0 8px 24px rgba(0, 0, 0, 0.28)",
+                fontFamily: "var(--font-mono)",
+                fontSize: "var(--text-caption)",
+                lineHeight: 1.4,
+                color: "var(--text-muted)",
+                pointerEvents: "none",
+              }}
+            >
+              {hint}
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}
+
+const DIGEST_HINT_ON = "Digest is on. Briefing this topic from the archive.";
+const DIGEST_HINT_OFF = "Digest this topic from the archive.";
+
+function DigestToggle({ active, onToggle }: { active: boolean; onToggle: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
+  const iconRef = useRef<HTMLButtonElement>(null);
+  const hint = active ? DIGEST_HINT_ON : DIGEST_HINT_OFF;
+
+  function show() {
+    const el = iconRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setCoords({ top: r.bottom + 8, left: r.right });
+    setOpen(true);
+  }
+
+  function hide() {
+    setOpen(false);
+  }
+
+  return (
+    <>
+      <button
+        ref={iconRef}
+        type="button"
+        aria-label={hint}
+        aria-pressed={active}
+        title={hint}
+        onMouseEnter={show}
+        onMouseLeave={hide}
+        onFocus={show}
+        onBlur={hide}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle();
+        }}
+        style={{
+          display: "inline-flex",
+          flexShrink: 0,
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 0,
+          border: "none",
+          background: "transparent",
+          color: active ? "var(--accent)" : "var(--text-faint)",
+          cursor: "pointer",
+          transition: "color var(--dur-fast) var(--ease-standard)",
+        }}
+      >
+        <Icon name="digest" size={14} />
       </button>
       {open && coords && typeof document !== "undefined"
         ? createPortal(

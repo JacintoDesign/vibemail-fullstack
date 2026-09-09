@@ -9,6 +9,7 @@ import {
   LogOut,
   Mail,
   MailOpen,
+  Newspaper,
   Paperclip,
   Reply,
   RotateCw,
@@ -33,6 +34,7 @@ export type IconName =
   | "reply"
   | "mail"
   | "mailOpen"
+  | "digest"
   | "settings"
   | "logout"
   | "inbox"
@@ -53,6 +55,7 @@ const MAP: Record<Exclude<IconName, "dot">, LucideIcon> = {
   reply: Reply,
   mail: Mail,
   mailOpen: MailOpen,
+  digest: Newspaper,
   settings: Settings,
   logout: LogOut,
   inbox: Inbox,

@@ -39,6 +39,7 @@ import {
   fetchRelated,
   fetchSearch,
   fetchSemanticSearch,
+  fetchDigest,
   getAccount,
   loadThread,
   reconcileInboxLabels,
@@ -189,6 +190,7 @@ export function VibeMailApp() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [searchMode, setSearchMode] = useState(false);
+  const [digestMode, setDigestMode] = useState(false);
   const [query, setQuery] = useState("");
   const [searchAnswer, setSearchAnswer] = useState<string | null>(null);
   const [searchNotice, setSearchNotice] = useState<string | null>(null);
@@ -249,18 +251,22 @@ export function VibeMailApp() {
     setSearchNotice(null);
     try {
       const page = searchMode
-        ? needsReasoning(query.trim())
-          ? await fetchSemanticSearch(query.trim())
-          : await fetchSearch(query.trim())
+        ? digestMode
+          ? await fetchDigest(query.trim())
+          : needsReasoning(query.trim())
+            ? await fetchSemanticSearch(query.trim())
+            : await fetchSearch(query.trim())
         : await fetchFolder(filter);
       if (reqIdRef.current !== myId) return; // a newer request superseded this
       setMessages(page.messages);
-      const answer = searchMode && page.answer ? page.answer : null;
+      const answer = digestMode ? page.digest ?? null : searchMode && page.answer ? page.answer : null;
       setSearchAnswer(answer);
       setSearchNotice(
-        searchMode && !answer && page.reasonUnavailable && page.messages.length > 0
-          ? REASON_QUOTA_NOTE
-          : null,
+        digestMode
+          ? null
+          : searchMode && !answer && page.reasonUnavailable && page.messages.length > 0
+            ? REASON_QUOTA_NOTE
+            : null,
       );
       setNextCursor(page.nextCursor);
       setEndCursor(page.endCursor);
@@ -279,7 +285,7 @@ export function VibeMailApp() {
     } finally {
       if (reqIdRef.current === myId) setLoading(false);
     }
-  }, [filter, searchMode, query]);
+  }, [filter, searchMode, digestMode, query]);
 
   useEffect(() => {
     if (searchMode) {
@@ -298,7 +304,7 @@ export function VibeMailApp() {
       return () => clearTimeout(t);
     }
     loadFirstPage();
-  }, [filter, searchMode, query, loadFirstPage]);
+  }, [filter, searchMode, digestMode, query, loadFirstPage]);
 
   // The inbox can pull older history from Gmail once its local rows run out;
   // other folders and search only page what's already synced.
@@ -316,9 +322,11 @@ export function VibeMailApp() {
       setLoadingMore(true);
       try {
         const page = searchMode
-          ? needsReasoning(query.trim())
-            ? await fetchSemanticSearch(query.trim())
-            : await fetchSearch(query.trim(), nextCursor)
+          ? digestMode
+            ? await fetchDigest(query.trim())
+            : needsReasoning(query.trim())
+              ? await fetchSemanticSearch(query.trim())
+              : await fetchSearch(query.trim(), nextCursor)
           : await fetchFolder(filter, nextCursor);
         setMessages((ms) => [...ms, ...page.messages]);
         setNextCursor(page.nextCursor);
@@ -358,7 +366,7 @@ export function VibeMailApp() {
     } finally {
       setLoadingMore(false);
     }
-  }, [nextCursor, loadingMore, searchMode, query, filter, canBackfill, endCursor, backfillCursor, inboxTarget]);
+  }, [nextCursor, loadingMore, searchMode, digestMode, query, filter, canBackfill, endCursor, backfillCursor, inboxTarget]);
 
   // ── Background auto-sync: fill the inbox up to its true size ────────────────
   // While viewing the inbox, keep pulling the next page (DB rows first, then
@@ -886,9 +894,21 @@ export function VibeMailApp() {
   const selectFolder = (f: string) => {
     setSelectedId(null);
     setSearchMode(false);
+    setDigestMode(false);
     setQuery("");
     setReadFilter("all");
     setFilter(f);
+  };
+
+  const toggleDigest = () => {
+    setDigestMode((on) => !on);
+    setSearchMode(true);
+  };
+
+  const clearSearch = () => {
+    setSearchMode(false);
+    setDigestMode(false);
+    setQuery("");
   };
 
   const onRefresh = () => {
@@ -1087,8 +1107,7 @@ export function VibeMailApp() {
       if (helpOpen) setHelpOpen(false);
       else if (composeOpen) setComposeOpen(false);
       else if (searchMode) {
-        setSearchMode(false);
-        setQuery("");
+        clearSearch();
       } else if (selectionActive) clearSelection();
       else if (selectedId) setSelectedId(null);
       return;
@@ -1498,15 +1517,14 @@ export function VibeMailApp() {
             onRetry={onRetry}
             refreshing={refreshing}
             searchMode={searchMode}
+            digestMode={digestMode}
             query={query}
             searchAnswer={searchAnswer}
             searchNotice={searchNotice}
             onQueryChange={setQuery}
-            onClearSearch={() => {
-              setSearchMode(false);
-              setQuery("");
-            }}
+            onClearSearch={clearSearch}
             onActivateSearch={() => setSearchMode(true)}
+            onToggleDigest={toggleDigest}
             readFilter={readFilter}
             onReadFilter={setReadFilter}
             onOpen={openMessage}
@@ -1623,7 +1641,7 @@ export function VibeMailApp() {
         {layout.listCollapsed ? (
           <CollapsedRail
             side="left"
-            label={searchMode ? "Search" : folderTitleFor(filter)}
+            label={digestMode ? "Digest" : searchMode ? "Search" : folderTitleFor(filter)}
             onExpand={() => patchLayout({ listCollapsed: false })}
           />
         ) : (
@@ -1635,15 +1653,14 @@ export function VibeMailApp() {
             onRetry={onRetry}
             refreshing={refreshing}
             searchMode={searchMode}
+            digestMode={digestMode}
             query={query}
             searchAnswer={searchAnswer}
             searchNotice={searchNotice}
             onQueryChange={setQuery}
-            onClearSearch={() => {
-              setSearchMode(false);
-              setQuery("");
-            }}
+            onClearSearch={clearSearch}
             onActivateSearch={() => setSearchMode(true)}
+            onToggleDigest={toggleDigest}
             readFilter={readFilter}
             onReadFilter={setReadFilter}
             onOpen={openMessage}

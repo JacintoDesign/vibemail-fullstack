@@ -22,9 +22,18 @@ export const MATCH_THRESHOLD = -0.82
  * signed-in user's nearest messages via `match_messages`. Ownership is passed
  * as `userId` (JWT `sub`) — never inferred from `auth.uid()`.
  */
-export async function searchByMeaning(userId: string, query: string): Promise<Message[]> {
+export async function searchByMeaning(
+  userId: string,
+  query: string,
+  opts?: { matchCount?: number; matchThreshold?: number },
+): Promise<Message[]> {
   const embedding = await embedText(query)
-  return matchUserMessages(userId, embedding)
+  return matchUserMessages(
+    userId,
+    embedding,
+    opts?.matchCount ?? MATCH_COUNT,
+    opts?.matchThreshold ?? MATCH_THRESHOLD,
+  )
 }
 
 /**
@@ -35,11 +44,12 @@ export async function matchUserMessages(
   userId: string,
   queryEmbedding: number[],
   matchCount: number = MATCH_COUNT,
+  matchThreshold: number = MATCH_THRESHOLD,
 ): Promise<Message[]> {
   const { data, error } = await getClient().rpc('match_messages', {
     p_user_id: userId,
     p_query_embedding: JSON.stringify(queryEmbedding),
-    p_match_threshold: MATCH_THRESHOLD,
+    p_match_threshold: matchThreshold,
     p_match_count: matchCount,
   })
 

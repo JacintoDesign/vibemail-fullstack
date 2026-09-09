@@ -21,11 +21,13 @@ export function SearchAnswerPanel({
   messages,
   onOpen,
   mobile,
+  heading = "Answer",
 }: {
   answer: string;
   messages: Message[];
   onOpen: (m: Message) => void;
   mobile?: boolean;
+  heading?: string;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [collapsed, setCollapsed] = useState(false);
@@ -112,7 +114,7 @@ export function SearchAnswerPanel({
           }}
         >
           <span style={{ display: "inline-flex", color: "var(--accent)" }}>
-            <Icon name="sparkles" size={14} />
+            <Icon name={heading === "Digest" ? "digest" : "sparkles"} size={14} />
           </span>
           <span
             style={{
@@ -124,12 +126,12 @@ export function SearchAnswerPanel({
               color: "var(--text-faint)",
             }}
           >
-            Answer
+            {heading}
           </span>
           <IconButton
             icon="chevronDown"
             size="sm"
-            label={collapsed ? "Expand answer" : "Collapse answer"}
+            label={collapsed ? `Expand ${heading.toLowerCase()}` : `Collapse ${heading.toLowerCase()}`}
             onClick={() => setCollapsed((v) => !v)}
             style={{
               transform: collapsed ? "none" : "rotate(180deg)",
@@ -203,7 +205,7 @@ export function SearchAnswerPanel({
 
             <button
               type="button"
-              aria-label="Resize answer"
+              aria-label={heading === "Digest" ? "Resize digest" : "Resize answer"}
               title="Drag to resize"
               className={"vm-row-resizer" + (dragging ? " dragging" : "")}
               onPointerDown={(e) => {

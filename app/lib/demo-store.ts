@@ -273,6 +273,35 @@ function demoAnswer(hits: ApiMessage[]): string | null {
   return `From the sample mailbox:\n\n${bullets.join("\n\n")}`;
 }
 
+/** Demo stand-in for a topic brief — a little longer than demoAnswer. */
+function demoDigest(topic: string, hits: ApiMessage[]): string {
+  const first = hits[0];
+  const second = hits[1];
+  const agree =
+    first && second
+      ? `${displayName(first.from)} and ${displayName(second.from)} both touch on this. `
+      : "";
+  const details = hits
+    .slice(0, 4)
+    .map((m, i) => {
+      const bit = (m.snippet || "").replace(/\s+/g, " ").trim();
+      const clip = bit.length > 110 ? `${bit.slice(0, 107)}…` : bit;
+      return `${clip} [${i + 1}] ${displayName(m.from)}`;
+    })
+    .join(" ");
+  const cited = hits
+    .slice(0, 6)
+    .map((m, i) => `[${i + 1}] ${displayName(m.from)}`)
+    .join(", ");
+  const leadName = first ? displayName(first.from) : "the archive";
+  return (
+    `From the sample mailbox on "${topic.trim()}": ${agree}` +
+    `${leadName} is one of ${hits.length} matching sources.\n\n` +
+    `${details}\n\n` +
+    `Each point above is tied to its newsletter. Sources: ${cited}.`
+  );
+}
+
 /**
  * Serve one API call from the in-memory demo store. Mirrors the subset of the
  * CONTRACT.md endpoints the frontend actually calls. `path` is the clean REST
@@ -291,8 +320,8 @@ export async function demoFetch<T>(path: string, init?: RequestInit): Promise<T>
 
   // /messages ...
   if (segments[0] === "messages") {
-    // GET /messages/search and /messages/semantic
-    if (segments[1] === "search" || segments[1] === "semantic") {
+    // GET /messages/search, /messages/semantic, /messages/digest
+    if (segments[1] === "search" || segments[1] === "semantic" || segments[1] === "digest") {
       const rawQ = params.get("q") ?? "";
       const q = rawQ.trim().toLowerCase();
       if (!q) return ok(page([]));
@@ -301,7 +330,15 @@ export async function demoFetch<T>(path: string, init?: RequestInit): Promise<T>
         return ok(page(hits));
       }
       // Demo has no vectors; overlap tokens and cap at live retrieval's count.
-      const limited = semanticHits(rows, rawQ).slice(0, 8);
+      const hits = semanticHits(rows, rawQ).filter((m) => m.status !== "trash" && m.status !== "draft");
+      if (segments[1] === "digest") {
+        const wide = hits.slice(0, 20);
+        if (wide.length === 0) {
+          return ok({ ...page([]), digest: null, reasonUnavailable: false });
+        }
+        return ok({ ...page(wide), digest: demoDigest(rawQ, wide), reasonUnavailable: false });
+      }
+      const limited = hits.slice(0, 8);
       if (limited.length === 0) {
         const keyword = rows.filter((m) => m.status !== "trash" && haystack(m).includes(q));
         return ok({ ...page(keyword), answer: null, reasonUnavailable: false, source: "keyword" });

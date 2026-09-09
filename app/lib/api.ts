@@ -39,6 +39,8 @@ export interface MessagePage {
   endCursor?: string | null;
   /** Grounded answer for question-style semantic search; null on lookups. */
   answer?: string | null;
+  /** Grounded topic brief; null when nothing relevant was retrieved. */
+  digest?: string | null;
   /** True when reasoning was skipped because the provider hit quota / was unavailable. */
   reasonUnavailable?: boolean;
   /** How the rows were retrieved — keyword fallback must never carry an answer. */
@@ -245,6 +247,11 @@ export function searchMessages(opts: {
 /** GET /api/v1/messages/semantic — nearest messages by meaning. */
 export function searchMessagesSemantic(q: string): Promise<MessagePage> {
   return apiFetch<MessagePage>(`/messages/semantic${qs({ q })}`);
+}
+
+/** GET /api/v1/messages/digest — wider retrieval plus a grounded topic brief. */
+export function digestMessages(q: string): Promise<MessagePage> {
+  return apiFetch<MessagePage>(`/messages/digest${qs({ q })}`);
 }
 
 /** GET /api/v1/messages/:id/related — other stories near this message's stored vector. */

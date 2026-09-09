@@ -5,6 +5,7 @@ import item from '../../src/routes/messages/item';
 import labels from '../../src/routes/messages/labels';
 import search from '../../src/routes/messages/search';
 import semantic from '../../src/routes/messages/semantic';
+import digest from '../../src/routes/messages/digest';
 import related from '../../src/routes/messages/related';
 
 /**
@@ -16,6 +17,7 @@ import related from '../../src/routes/messages/related';
  *   /messages              -> collection (GET list, POST send)  [no rewrite]
  *   /messages/search       -> search     (GET)        __route=search
  *   /messages/semantic     -> semantic   (GET)        __route=semantic
+ *   /messages/digest       -> digest     (GET)        __route=digest
  *   /messages/:id/related  -> related    (GET)        __route=related  id=:id
  *   /messages/:id/labels   -> labels     (POST/DELETE)        __route=labels id=:id
  *   /messages/:id          -> item       (GET/PATCH/DELETE)  __route=item   id=:id
@@ -31,6 +33,8 @@ export default function handler(
       return search(req, res);
     case 'semantic':
       return semantic(req, res);
+    case 'digest':
+      return digest(req, res);
     case 'related':
       return related(req, res);
     case 'item':

@@ -11,6 +11,7 @@ import {
   reconcileInbox,
   searchMessages,
   searchMessagesSemantic,
+  digestMessages,
   listRelatedMessages,
   threadMsgOf,
   toUiMessage,
@@ -26,6 +27,8 @@ export interface MessagePage {
   endCursor: string | null;
   /** Grounded answer for question-style semantic search; null on lookups. */
   answer?: string | null;
+  /** Grounded topic brief; null when nothing relevant was retrieved. */
+  digest?: string | null;
   /** True when reasoning was skipped because the provider hit quota / was unavailable. */
   reasonUnavailable?: boolean;
 }
@@ -140,6 +143,20 @@ export async function fetchSemanticSearch(q: string): Promise<MessagePage> {
     // Keyword fallback and lookups never get a confident answer panel.
     answer: fromKeyword ? null : page.answer ?? null,
     reasonUnavailable: !fromKeyword && page.reasonUnavailable === true,
+  };
+}
+
+/** Fetch a topic digest: wider retrieval than search, plus a grounded brief. */
+export async function fetchDigest(q: string): Promise<MessagePage> {
+  const page = await digestMessages(q);
+  return {
+    messages: (page.messages ?? [])
+      .filter((m) => m.status !== "trash" && m.status !== "draft")
+      .map(toUiMessage),
+    nextCursor: page.nextCursor,
+    endCursor: page.endCursor ?? null,
+    digest: page.digest ?? null,
+    reasonUnavailable: page.reasonUnavailable === true,
   };
 }
 

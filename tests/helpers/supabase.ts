@@ -78,6 +78,7 @@ export async function seedMessage(
     subject:    string;
     from_address: string;
     snippet:    string;
+    body_plain: string;
   }>,
 ): Promise<SeedMessage> {
   const tag     = `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -97,7 +98,7 @@ export async function seedMessage(
       subject:      overrides?.subject      ?? 'Test Subject',
       date:         new Date().toUTCString(),
       snippet:      overrides?.snippet      ?? 'Test snippet',
-      body_plain:   'Hello world',
+      body_plain:   overrides?.body_plain   ?? 'Hello world',
       body_html:    '<p>Hello world</p>',
       is_read:      overrides?.is_read      ?? false,
       is_starred:   overrides?.is_starred   ?? false,
