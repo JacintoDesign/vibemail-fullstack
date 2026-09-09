@@ -59,8 +59,10 @@ CREATE INDEX IF NOT EXISTS idx_message_chunks_embedding
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 4. Row-Level Security
 -- ─────────────────────────────────────────────────────────────────────────────
--- Ownership is enforced here (user_id = auth.uid()), not in application code
--- (memory_contract.md §3). Service role still bypasses RLS — do not FORCE.
+-- Defence-in-depth only, same as messages (memory_contract.md §3). The server
+-- uses SUPABASE_SERVICE_ROLE_KEY (bypasses RLS) and a custom HS256 JWT, so
+-- auth.uid() is never populated. Ownership is enforced in application code
+-- and in any retrieval SQL via an explicit user_id argument. Do not FORCE.
 -- Policy creation is wrapped in a DO block; pg_policies is checked before
 -- issuing CREATE POLICY so re-runs are safe.
 
