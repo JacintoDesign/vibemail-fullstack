@@ -4,6 +4,8 @@ import collection from '../../src/routes/messages/collection';
 import item from '../../src/routes/messages/item';
 import labels from '../../src/routes/messages/labels';
 import search from '../../src/routes/messages/search';
+import semantic from '../../src/routes/messages/semantic';
+import related from '../../src/routes/messages/related';
 
 /**
  * Single Serverless Function for the whole /api/v1/messages tree. The per-route
@@ -13,8 +15,10 @@ import search from '../../src/routes/messages/search';
  *
  *   /messages              -> collection (GET list, POST send)  [no rewrite]
  *   /messages/search       -> search     (GET)        __route=search
- *   /messages/:id          -> item       (GET/PATCH/DELETE)  __route=item   id=:id
+ *   /messages/semantic     -> semantic   (GET)        __route=semantic
+ *   /messages/:id/related  -> related    (GET)        __route=related  id=:id
  *   /messages/:id/labels   -> labels     (POST/DELETE)        __route=labels id=:id
+ *   /messages/:id          -> item       (GET/PATCH/DELETE)  __route=item   id=:id
  *
  * Each handler still validates its own HTTP method.
  */
@@ -25,6 +29,10 @@ export default function handler(
   switch (req.query.__route) {
     case 'search':
       return search(req, res);
+    case 'semantic':
+      return semantic(req, res);
+    case 'related':
+      return related(req, res);
     case 'item':
       return item(req, res);
     case 'labels':

@@ -3,17 +3,20 @@
 // Middle column: folder header + read-toggle + search + cards + states.
 // Ported from MessageList.jsx. The inbox/search card is the shared MessageRow.
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Banner, Button, Icon, IconButton, Input, Skeleton } from "@/components/ds";
 import type { IconName } from "@/components/ds";
 import type { Message } from "@/lib/types";
 import type { Density } from "@/lib/shell-vars";
 import { useSettings } from "@/providers/SettingsProvider";
+import { needsReasoning } from "@/lib/needs-reasoning";
 import { ChromeBtn } from "./PanelChrome";
 import { Hamburger } from "./Hamburger";
 import { MessageRow } from "./MessageRow";
+import { SearchAnswerPanel } from "./SearchAnswerPanel";
 
 export type ReadFilter = "all" | "unread";
 
@@ -25,6 +28,9 @@ export interface MessageListProps {
   refreshing?: boolean;
   searchMode?: boolean;
   query: string;
+  searchAnswer?: string | null;
+  /** Quiet caption when a summary could not be produced (quota, etc.). */
+  searchNotice?: string | null;
   onQueryChange: (v: string) => void;
   onClearSearch?: () => void;
   onActivateSearch?: () => void;
@@ -336,6 +342,8 @@ export function MessageList({
   refreshing,
   searchMode,
   query,
+  searchAnswer,
+  searchNotice,
   onQueryChange,
   onClearSearch,
   onActivateSearch,
@@ -389,7 +397,7 @@ export function MessageList({
       <div
         style={{
           display: "flex",
-          alignItems: "center",
+          alignItems: "flex-start",
           gap: mobile ? 4 : 10,
           padding: mobile ? "8px 8px 7px" : "16px 10px 12px",
         }}
@@ -404,7 +412,8 @@ export function MessageList({
             fontWeight: "var(--fw-bold)",
             color: "var(--text-primary)",
             display: "flex",
-            alignItems: "baseline",
+            alignItems: "center",
+            minHeight: 28,
             gap: 8,
           }}
         >
@@ -461,7 +470,7 @@ export function MessageList({
           scrollbarGutter: "stable",
         }}
       >
-        <div style={{ flex: 1 }} onClick={onActivateSearch}>
+        <div style={{ flex: 1, minWidth: 0, overflow: "visible" }} onClick={onActivateSearch}>
           <Input
             icon="search"
             glow={searchMode}
@@ -469,6 +478,7 @@ export function MessageList({
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
             onClear={searchMode ? onClearSearch : undefined}
+            trailing={<SemanticSearchHint active={needsReasoning(query)} />}
             style={{ height: "var(--control-h)" }}
           />
         </div>
@@ -489,7 +499,29 @@ export function MessageList({
           >
             {query.trim()
               ? `${messages.length} result${messages.length === 1 ? "" : "s"} for "${query.trim()}"`
-              : "Type to search subject, sender, or body…"}
+              : "Search by keyword, or ask a question to search by meaning…"}
+          </span>
+        </div>
+      ) : null}
+
+      {searchMode && searchAnswer ? (
+        <SearchAnswerPanel
+          answer={searchAnswer}
+          messages={messages}
+          onOpen={onOpen}
+          mobile={mobile}
+        />
+      ) : searchMode && searchNotice ? (
+        <div style={{ padding: "6px 10px 4px" }}>
+          <span
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "var(--text-caption)",
+              color: "var(--text-faint)",
+              lineHeight: 1.5,
+            }}
+          >
+            {searchNotice}
           </span>
         </div>
       ) : null}
@@ -525,7 +557,7 @@ export function MessageList({
             <ListEmpty
               icon={searchMode ? "search" : "inbox"}
               text={searchMode ? "No messages match your search." : emptyText || "Your inbox is empty."}
-              hint={searchMode ? "Try a different name, subject, or keyword." : emptyHint}
+              hint={searchMode ? "Try a keyword, or ask a question in plain language." : emptyHint}
             />
           </div>
         ) : (
@@ -549,5 +581,86 @@ export function MessageList({
         )}
       </div>
     </div>
+  );
+}
+
+const SEMANTIC_HINT_ON = "Semantic search is on. Matching mail by meaning.";
+const SEMANTIC_HINT_OFF = "Type a question to search by meaning.";
+
+function SemanticSearchHint({ active }: { active: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
+  const iconRef = useRef<HTMLButtonElement>(null);
+  const hint = active ? SEMANTIC_HINT_ON : SEMANTIC_HINT_OFF;
+
+  function show() {
+    const el = iconRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setCoords({ top: r.bottom + 8, left: r.right });
+    setOpen(true);
+  }
+
+  function hide() {
+    setOpen(false);
+  }
+
+  return (
+    <>
+      <button
+        ref={iconRef}
+        type="button"
+        aria-label={hint}
+        title={hint}
+        onMouseEnter={show}
+        onMouseLeave={hide}
+        onFocus={show}
+        onBlur={hide}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          display: "inline-flex",
+          flexShrink: 0,
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 0,
+          border: "none",
+          background: "transparent",
+          color: active ? "var(--accent)" : "var(--text-faint)",
+          cursor: "help",
+          transition: "color var(--dur-fast) var(--ease-standard)",
+        }}
+      >
+        <Icon name="sparkles" size={14} />
+      </button>
+      {open && coords && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              role="tooltip"
+              style={{
+                position: "fixed",
+                top: coords.top,
+                left: coords.left,
+                transform: "translateX(-100%)",
+                zIndex: 80,
+                maxWidth: 240,
+                padding: "8px 10px",
+                background: "var(--navy-raised)",
+                border: "1px solid var(--border-default)",
+                borderRadius: "var(--radius-sm)",
+                boxShadow: "0 8px 24px rgba(0, 0, 0, 0.28)",
+                fontFamily: "var(--font-mono)",
+                fontSize: "var(--text-caption)",
+                lineHeight: 1.4,
+                color: "var(--text-muted)",
+                pointerEvents: "none",
+              }}
+            >
+              {hint}
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
   );
 }

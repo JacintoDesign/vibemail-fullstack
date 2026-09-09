@@ -3,5 +3,5 @@
   "compilerOptions": {
     "types": ["jest", "node"]
   },
-  "include": ["src/**/*", "api/**/*", "tests/**/*"]
+  "include": ["src/**/*", "api/**/*", "tests/**/*", "app/lib/search-answer.ts"]
 }

@@ -36,11 +36,15 @@ import {
   backfillOlderInbox,
   DEFAULT_LABELS,
   fetchFolder,
+  fetchRelated,
   fetchSearch,
+  fetchSemanticSearch,
   getAccount,
   loadThread,
   reconcileInboxLabels,
+  REASON_QUOTA_NOTE,
 } from "@/lib/data-source";
+import { needsReasoning } from "@/lib/needs-reasoning";
 import type { CSSVars, Message } from "@/lib/types";
 import { isDemo } from "@/lib/demo";
 import { useSettings } from "@/providers/SettingsProvider";
@@ -186,6 +190,9 @@ export function VibeMailApp() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [searchMode, setSearchMode] = useState(false);
   const [query, setQuery] = useState("");
+  const [searchAnswer, setSearchAnswer] = useState<string | null>(null);
+  const [searchNotice, setSearchNotice] = useState<string | null>(null);
+  const [related, setRelated] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -238,12 +245,23 @@ export function VibeMailApp() {
     const myId = ++reqIdRef.current;
     setLoading(true);
     setError(null);
+    setSearchAnswer(null);
+    setSearchNotice(null);
     try {
       const page = searchMode
-        ? await fetchSearch(query.trim())
+        ? needsReasoning(query.trim())
+          ? await fetchSemanticSearch(query.trim())
+          : await fetchSearch(query.trim())
         : await fetchFolder(filter);
       if (reqIdRef.current !== myId) return; // a newer request superseded this
       setMessages(page.messages);
+      const answer = searchMode && page.answer ? page.answer : null;
+      setSearchAnswer(answer);
+      setSearchNotice(
+        searchMode && !answer && page.reasonUnavailable && page.messages.length > 0
+          ? REASON_QUOTA_NOTE
+          : null,
+      );
       setNextCursor(page.nextCursor);
       setEndCursor(page.endCursor);
       // Reset the older-history backfill walk for the freshly loaded view.
@@ -253,6 +271,8 @@ export function VibeMailApp() {
     } catch (e) {
       if (reqIdRef.current !== myId) return;
       setMessages([]);
+      setSearchAnswer(null);
+      setSearchNotice(null);
       setNextCursor(null);
       setEndCursor(null);
       setError(errMessage(e));
@@ -266,6 +286,8 @@ export function VibeMailApp() {
       if (!query.trim()) {
         reqIdRef.current++; // cancel any in-flight search
         setMessages([]);
+        setSearchAnswer(null);
+        setSearchNotice(null);
         setNextCursor(null);
         setLoading(false);
         setError(null);
@@ -294,7 +316,9 @@ export function VibeMailApp() {
       setLoadingMore(true);
       try {
         const page = searchMode
-          ? await fetchSearch(query.trim(), nextCursor)
+          ? needsReasoning(query.trim())
+            ? await fetchSemanticSearch(query.trim())
+            : await fetchSearch(query.trim(), nextCursor)
           : await fetchFolder(filter, nextCursor);
         setMessages((ms) => [...ms, ...page.messages]);
         setNextCursor(page.nextCursor);
@@ -574,6 +598,22 @@ export function VibeMailApp() {
     setMessages((ms) => ms.map((m) => (m.id === id ? { ...m, ...patch } : m)));
   const selected = useMemo(() => messages.find((m) => m.id === selectedId) || null, [messages, selectedId]);
 
+  useEffect(() => {
+    const gmailId = selected?.gmailId;
+    if (!gmailId) {
+      setRelated([]);
+      return;
+    }
+    setRelated([]);
+    let cancelled = false;
+    fetchRelated(gmailId).then((rows) => {
+      if (!cancelled) setRelated(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected?.gmailId]);
+
   // Apply an optimistic local change, fire the PATCH, then reconcile the derived
   // flags from the server response — rolling the row back (and toasting) on
   // failure. ALREADY_IN_STATE means the optimistic value was already correct.
@@ -812,6 +852,9 @@ export function VibeMailApp() {
       setSelectedId(null);
       return;
     }
+    // Related hits may live outside the current folder page; keep them in
+    // `messages` so `selected` still resolves after the click.
+    setMessages((ms) => (ms.some((x) => x.id === m.id) ? ms : [m, ...ms]));
     setSelectedId(m.id);
     if (layout.readCollapsed) patchLayout({ readCollapsed: false });
     // Mark read on the server (PATCH) if it was unread.
@@ -1418,6 +1461,8 @@ export function VibeMailApp() {
             onMenu={() => setMobileNavOpen(true)}
             onBack={() => setSelectedId(null)}
             message={selected}
+            related={related}
+            onOpenRelated={openMessage}
             onReply={() => {
               setDraft(null);
               setReplyTo(selected);
@@ -1454,6 +1499,8 @@ export function VibeMailApp() {
             refreshing={refreshing}
             searchMode={searchMode}
             query={query}
+            searchAnswer={searchAnswer}
+            searchNotice={searchNotice}
             onQueryChange={setQuery}
             onClearSearch={() => {
               setSearchMode(false);
@@ -1589,6 +1636,8 @@ export function VibeMailApp() {
             refreshing={refreshing}
             searchMode={searchMode}
             query={query}
+            searchAnswer={searchAnswer}
+            searchNotice={searchNotice}
             onQueryChange={setQuery}
             onClearSearch={() => {
               setSearchMode(false);
@@ -1628,6 +1677,8 @@ export function VibeMailApp() {
         ) : (
           <ReadingPane
             message={selected}
+            related={related}
+            onOpenRelated={openMessage}
             onReply={() => {
               setDraft(null);
               setReplyTo(selected);

@@ -10,6 +10,8 @@ import {
   listMessages,
   reconcileInbox,
   searchMessages,
+  searchMessagesSemantic,
+  listRelatedMessages,
   threadMsgOf,
   toUiMessage,
 } from "./api";
@@ -22,6 +24,10 @@ export interface MessagePage {
   // Keyset of the last loaded row; lets the caller resume paging after a
   // backfill adds older rows even once nextCursor has gone null.
   endCursor: string | null;
+  /** Grounded answer for question-style semantic search; null on lookups. */
+  answer?: string | null;
+  /** True when reasoning was skipped because the provider hit quota / was unavailable. */
+  reasonUnavailable?: boolean;
 }
 
 // Fallback cap when the true inbox size isn't known yet (no /labels response).
@@ -104,6 +110,49 @@ export async function fetchSearch(q: string, cursor?: string): Promise<MessagePa
     nextCursor: page.nextCursor,
     endCursor: page.endCursor ?? null,
   };
+}
+
+/** Quiet caption when reasoning quota is exhausted — never an error banner. */
+export const REASON_QUOTA_NOTE =
+  "Couldn't summarize — the reasoning quota was reached. Matching mail is still shown.";
+
+/** Fetch nearest messages by meaning into the same list shape as fetchSearch. */
+export async function fetchSemanticSearch(q: string): Promise<MessagePage> {
+  const page = await searchMessagesSemantic(q);
+  const semantic = (page.messages ?? []).filter((m) => m.status !== "trash").map(toUiMessage);
+  const fromKeyword = page.source === "keyword";
+
+  if (semantic.length === 0) {
+    const keyword = await fetchSearch(q);
+    return {
+      messages: keyword.messages,
+      nextCursor: keyword.nextCursor,
+      endCursor: keyword.endCursor,
+      answer: null,
+      reasonUnavailable: false,
+    };
+  }
+
+  return {
+    messages: semantic,
+    nextCursor: page.nextCursor,
+    endCursor: page.endCursor ?? null,
+    // Keyword fallback and lookups never get a confident answer panel.
+    answer: fromKeyword ? null : page.answer ?? null,
+    reasonUnavailable: !fromKeyword && page.reasonUnavailable === true,
+  };
+}
+
+/** Neighbors of an open message by its stored embedding. Empty when none are close. */
+export async function fetchRelated(gmailId: string): Promise<Message[]> {
+  try {
+    const { messages } = await listRelatedMessages(gmailId);
+    return messages
+      .filter((m) => m.status !== "trash" && m.gmailId !== gmailId)
+      .map(toUiMessage);
+  } catch {
+    return [];
+  }
 }
 
 /** Load a full thread (oldest-first) as renderable thread cards. */

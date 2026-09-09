@@ -161,6 +161,118 @@ function page(messages: ApiMessage[]): MessagePage {
   return { messages, nextCursor: null, endCursor: null };
 }
 
+const QUESTION_START =
+  /^(who|who's|whom|whose|what|what's|when|where's|where|why|how|did|do|does|is|are|can|could|would|should|which|was|were|will|has|have|had|am)\b/i;
+
+function isQuestionLike(raw: string): boolean {
+  const text = raw.trim();
+  if (!text) return false;
+  if (text.includes("?")) return true;
+  if (QUESTION_START.test(text)) return true;
+  return text.split(/\s+/).filter(Boolean).length >= 5;
+}
+
+const DEMO_STOP = new Set([
+  "what",
+  "what's",
+  "whats",
+  "who",
+  "who's",
+  "where",
+  "when",
+  "why",
+  "how",
+  "did",
+  "does",
+  "the",
+  "and",
+  "for",
+  "any",
+  "some",
+  "about",
+  "from",
+  "with",
+  "into",
+  "that",
+  "this",
+  "best",
+  "out",
+  "now",
+  "are",
+  "can",
+  "could",
+  "would",
+  "should",
+  "which",
+  "was",
+  "were",
+  "will",
+  "has",
+  "have",
+  "had",
+]);
+
+function demoTokens(q: string): string[] {
+  return q
+    .toLowerCase()
+    .replace(/[?!.,:;]+/g, " ")
+    .split(/\s+/)
+    .filter((t) => t.length >= 3 && !DEMO_STOP.has(t));
+}
+
+function haystack(m: ApiMessage): string {
+  return [m.subject, m.snippet, m.from, m.to, m.bodyPlain ?? ""].join(" ").toLowerCase();
+}
+
+/** Demo stand-in for stored-vector neighbors. No embeddings; subject tokens only. */
+function demoRelated(origin: ApiMessage, rows: ApiMessage[]): ApiMessage[] {
+  const tokens = demoTokens(origin.subject).filter((t) => t.length >= 6);
+  if (tokens.length === 0) return [];
+  return rows
+    .filter(
+      (m) => m.status !== "trash" && m.id !== origin.id && m.threadId !== origin.threadId,
+    )
+    .map((m) => ({
+      m,
+      score: tokens.filter((t) => m.subject.toLowerCase().includes(t)).length,
+    }))
+    .filter((x) => x.score >= 1)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 4)
+    .map((x) => x.m);
+}
+
+/** Token overlap so demo "semantic" can answer questions, not only exact phrases. */
+function semanticHits(rows: ApiMessage[], q: string): ApiMessage[] {
+  const tokens = demoTokens(q);
+  const live = rows.filter((m) => m.status !== "trash");
+  if (tokens.length === 0) {
+    const needle = q.trim().toLowerCase();
+    return live.filter((m) => haystack(m).includes(needle));
+  }
+  return live
+    .map((m) => ({ m, score: tokens.filter((t) => haystack(m).includes(t)).length }))
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .map((x) => x.m);
+}
+
+function displayName(from: string): string {
+  const angled = from.indexOf("<");
+  const raw = angled >= 0 ? from.slice(0, angled) : from;
+  return raw.trim().replace(/^"|"$/g, "") || from;
+}
+
+function demoAnswer(hits: ApiMessage[]): string | null {
+  if (hits.length === 0) return null;
+  const bullets = hits.slice(0, 4).map((m, i) => {
+    const bit = (m.snippet || "").replace(/\s+/g, " ").trim();
+    const clip = bit.length > 140 ? `${bit.slice(0, 137)}…` : bit;
+    return `- **${m.subject}** — ${clip} [${i + 1}] ${displayName(m.from)}`;
+  });
+  return `From the sample mailbox:\n\n${bullets.join("\n\n")}`;
+}
+
 /**
  * Serve one API call from the in-memory demo store. Mirrors the subset of the
  * CONTRACT.md endpoints the frontend actually calls. `path` is the clean REST
@@ -179,19 +291,23 @@ export async function demoFetch<T>(path: string, init?: RequestInit): Promise<T>
 
   // /messages ...
   if (segments[0] === "messages") {
-    // GET /messages/search
-    if (segments[1] === "search") {
-      const q = (params.get("q") ?? "").trim().toLowerCase();
+    // GET /messages/search and /messages/semantic
+    if (segments[1] === "search" || segments[1] === "semantic") {
+      const rawQ = params.get("q") ?? "";
+      const q = rawQ.trim().toLowerCase();
       if (!q) return ok(page([]));
-      const hits = rows.filter(
-        (m) =>
-          m.status !== "trash" &&
-          [m.subject, m.snippet, m.from, m.to, m.bodyPlain ?? ""]
-            .join(" ")
-            .toLowerCase()
-            .includes(q),
-      );
-      return ok(page(hits));
+      if (segments[1] === "search") {
+        const hits = rows.filter((m) => m.status !== "trash" && haystack(m).includes(q));
+        return ok(page(hits));
+      }
+      // Demo has no vectors; overlap tokens and cap at live retrieval's count.
+      const limited = semanticHits(rows, rawQ).slice(0, 8);
+      if (limited.length === 0) {
+        const keyword = rows.filter((m) => m.status !== "trash" && haystack(m).includes(q));
+        return ok({ ...page(keyword), answer: null, reasonUnavailable: false, source: "keyword" });
+      }
+      const answer = isQuestionLike(rawQ) ? demoAnswer(limited) : null;
+      return ok({ ...page(limited), answer, reasonUnavailable: false, source: "semantic" });
     }
 
     // Collection: GET /messages (list) and POST /messages (send).
@@ -216,6 +332,15 @@ export async function demoFetch<T>(path: string, init?: RequestInit): Promise<T>
     // Item routes: /messages/:id and /messages/:id/labels
     const gmailId = decodeURIComponent(segments[1]);
     const target = findByGmailId(gmailId);
+
+    if (segments[2] === "related") {
+      if (!target) {
+        throw new ApiError(404, {
+          error: { code: "MESSAGE_NOT_FOUND", message: "Message not found." },
+        });
+      }
+      return ok({ messages: demoRelated(target, rows) });
+    }
 
     if (segments[2] === "labels") {
       if (!target || !body.labelId) {

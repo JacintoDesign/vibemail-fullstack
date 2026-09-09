@@ -37,6 +37,12 @@ export interface MessagePage {
   // Keyset of the last returned row, present even when nextCursor is null, so
   // the client can resume paging after a backfill inserts older rows.
   endCursor?: string | null;
+  /** Grounded answer for question-style semantic search; null on lookups. */
+  answer?: string | null;
+  /** True when reasoning was skipped because the provider hit quota / was unavailable. */
+  reasonUnavailable?: boolean;
+  /** How the rows were retrieved — keyword fallback must never carry an answer. */
+  source?: "semantic" | "keyword";
 }
 
 /** Result of one POST /api/v1/sync/backfill batch. */
@@ -234,6 +240,16 @@ export function searchMessages(opts: {
   return apiFetch<MessagePage>(
     `/messages/search${qs({ q: opts.q, cursor: opts.cursor, limit: opts.limit })}`,
   );
+}
+
+/** GET /api/v1/messages/semantic — nearest messages by meaning. */
+export function searchMessagesSemantic(q: string): Promise<MessagePage> {
+  return apiFetch<MessagePage>(`/messages/semantic${qs({ q })}`);
+}
+
+/** GET /api/v1/messages/:id/related — other stories near this message's stored vector. */
+export function listRelatedMessages(id: string): Promise<{ messages: ApiMessage[] }> {
+  return apiFetch(`/messages/${encodeURIComponent(id)}/related`);
 }
 
 /** One Gmail label with its counts, as returned by GET /api/v1/labels. */

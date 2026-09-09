@@ -15,6 +15,7 @@ import {
   Search,
   Send,
   Settings,
+  Sparkles,
   SquarePen,
   Star,
   Trash2,
@@ -40,7 +41,8 @@ export type IconName =
   | "paperclip"
   | "x"
   | "dot"
-  | "chevronDown";
+  | "chevronDown"
+  | "sparkles";
 
 const MAP: Record<Exclude<IconName, "dot">, LucideIcon> = {
   compose: SquarePen,
@@ -59,6 +61,7 @@ const MAP: Record<Exclude<IconName, "dot">, LucideIcon> = {
   paperclip: Paperclip,
   x: X,
   chevronDown: ChevronDown,
+  sparkles: Sparkles,
 };
 
 export interface IconProps {

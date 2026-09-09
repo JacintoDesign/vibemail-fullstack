@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ChangeEvent, type CSSProperties } from "react";
+import { useState, type ChangeEvent, type CSSProperties, type ReactNode } from "react";
 import { Icon, type IconName } from "./Icon";
 
 export interface InputProps {
@@ -11,6 +11,7 @@ export interface InputProps {
   value?: string;
   onChange?: (e: ChangeEvent<HTMLInputElement>) => void;
   onClear?: () => void;
+  trailing?: ReactNode;
   style?: CSSProperties;
 }
 
@@ -22,6 +23,7 @@ export function Input({
   value,
   onChange,
   onClear,
+  trailing,
   style,
 }: InputProps) {
   const [focus, setFocus] = useState(false);
@@ -95,6 +97,7 @@ export function Input({
           <Icon name="x" size={14} />
         </button>
       ) : null}
+      {trailing}
     </div>
   );
 }

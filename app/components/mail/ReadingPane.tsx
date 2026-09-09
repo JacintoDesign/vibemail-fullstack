@@ -8,9 +8,12 @@ import type { Message } from "@/lib/types";
 import { ChromeBtn } from "./PanelChrome";
 import { Hamburger } from "./Hamburger";
 import { MessageCard } from "./MessageCard";
+import { RelatedPanel } from "./RelatedPanel";
 
 export interface ReadingPaneProps {
   message: Message | null;
+  related?: Message[];
+  onOpenRelated?: (m: Message) => void;
   onReply: () => void;
   onToggleStar: () => void;
   onMarkUnread: () => void;
@@ -119,6 +122,8 @@ export function ReadingPane(props: ReadingPaneProps) {
 
 function ThreadReader({
   message,
+  related = [],
+  onOpenRelated,
   onReply,
   onToggleStar,
   onMarkUnread,
@@ -133,6 +138,10 @@ function ThreadReader({
   onMenu,
   onBack,
 }: ReadingPaneProps & { message: Message }) {
+  const relatedEl =
+    related.length > 0 && onOpenRelated ? (
+      <RelatedPanel messages={related} onOpen={onOpenRelated} stacked={mobile} />
+    ) : null;
   const thread = message.thread || [];
   const [openSet, setOpenSet] = useState<Set<number>>(() => new Set([thread.length - 1]));
   useEffect(() => {
@@ -253,6 +262,7 @@ function ThreadReader({
         >
           {cards}
           {quickReply}
+          {relatedEl}
         </div>
       </div>
     );
@@ -265,69 +275,72 @@ function ThreadReader({
     </Button>
   ) : inTrash ? (
     <>
-      <IconButton icon="inbox" variant="ghost" label="Restore to Inbox" onClick={onRestore} />
-      <IconButton icon="star" label="Star" active={message.isStarred} onClick={onToggleStar} />
-      <IconButton icon="trash" variant="ghost" label="Delete forever" onClick={onDeleteForever} />
+      <IconButton icon="inbox" variant="ghost" size="sm" label="Restore to Inbox" onClick={onRestore} />
+      <IconButton icon="star" size="sm" label="Star" active={message.isStarred} onClick={onToggleStar} />
+      <IconButton icon="trash" variant="ghost" size="sm" label="Delete forever" onClick={onDeleteForever} />
       <ChromeBtn icon="popOut" label="Pop out thread" onClick={onPopOut} />
     </>
   ) : inArchive ? (
     <>
-      <IconButton icon="inbox" variant="ghost" label="Move to Inbox" onClick={onRestore} />
-      <IconButton icon="mail" variant="ghost" label="Mark unread" onClick={onMarkUnread} />
-      <IconButton icon="star" label="Star" active={message.isStarred} onClick={onToggleStar} />
-      <IconButton icon="trash" variant="ghost" label="Delete" onClick={onTrash} />
+      <IconButton icon="inbox" variant="ghost" size="sm" label="Move to Inbox" onClick={onRestore} />
+      <IconButton icon="mail" variant="ghost" size="sm" label="Mark unread" onClick={onMarkUnread} />
+      <IconButton icon="star" size="sm" label="Star" active={message.isStarred} onClick={onToggleStar} />
+      <IconButton icon="trash" variant="ghost" size="sm" label="Delete" onClick={onTrash} />
       <ChromeBtn icon="popOut" label="Pop out thread" onClick={onPopOut} />
     </>
   ) : (
     <>
-      <IconButton icon="mail" variant="ghost" label="Mark unread" onClick={onMarkUnread} />
-      <IconButton icon="star" label="Star" active={message.isStarred} onClick={onToggleStar} />
-      <IconButton icon="archive" variant="ghost" label="Archive" onClick={onArchive} />
-      <IconButton icon="trash" variant="ghost" label="Delete" onClick={onTrash} />
+      <IconButton icon="mail" variant="ghost" size="sm" label="Mark unread" onClick={onMarkUnread} />
+      <IconButton icon="star" size="sm" label="Star" active={message.isStarred} onClick={onToggleStar} />
+      <IconButton icon="archive" variant="ghost" size="sm" label="Archive" onClick={onArchive} />
+      <IconButton icon="trash" variant="ghost" size="sm" label="Delete" onClick={onTrash} />
       <ChromeBtn icon="popOut" label="Pop out thread" onClick={onPopOut} />
     </>
   );
 
   return (
-    <div
-      className="vm-thread-reader"
-      style={{ flex: 1, minWidth: "var(--thread-min)", height: "100%", display: "flex", flexDirection: "column" }}
-    >
-      <div className="vm-thread-head">
-        <h1 className="vm-thread-title">{message.subject || "(no subject)"}</h1>
-        <div className="vm-thread-actions">{actionsEl}</div>
-        <div className="vm-thread-collapse">
-          <ChromeBtn icon="collapseRight" label="Collapse reading pane" onClick={onCollapse} />
-        </div>
-        <div className="vm-thread-meta">
-          <span
-            style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-caption)", color: "var(--text-faint)" }}
-          >
-            {thread.length} message{thread.length === 1 ? "" : "s"}
-          </span>
-          {isDraft ? <Badge tone="warning">Draft</Badge> : null}
-          {message.status === "sent" ? <Badge>Sent</Badge> : null}
-          {(message.labels || []).map((l) => (
-            <Badge key={l}>{l}</Badge>
-          ))}
-        </div>
-      </div>
-
+    <div className="vm-read-split">
       <div
-        className="vm-thread-msgs"
-        style={{
-          flex: 1,
-          overflowY: "auto",
-          minHeight: 0,
-          padding: "18px 22px",
-          display: "flex",
-          flexDirection: "column",
-          gap: 10,
-        }}
+        className="vm-thread-reader"
+        style={{ flex: 1, minWidth: 0, height: "100%", display: "flex", flexDirection: "column" }}
       >
-        {cards}
-        {quickReply}
+        <div className="vm-thread-head">
+          <h1 className="vm-thread-title">{message.subject || "(no subject)"}</h1>
+          <div className="vm-thread-actions">{actionsEl}</div>
+          <div className="vm-thread-collapse">
+            <ChromeBtn icon="collapseRight" label="Collapse reading pane" onClick={onCollapse} />
+          </div>
+          <div className="vm-thread-meta">
+            <span
+              style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-caption)", color: "var(--text-faint)" }}
+            >
+              {thread.length} message{thread.length === 1 ? "" : "s"}
+            </span>
+            {isDraft ? <Badge tone="warning">Draft</Badge> : null}
+            {message.status === "sent" ? <Badge>Sent</Badge> : null}
+            {(message.labels || []).map((l) => (
+              <Badge key={l}>{l}</Badge>
+            ))}
+          </div>
+        </div>
+
+        <div
+          className="vm-thread-msgs"
+          style={{
+            flex: 1,
+            overflowY: "auto",
+            minHeight: 0,
+            padding: "18px 22px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+          }}
+        >
+          {cards}
+          {quickReply}
+        </div>
       </div>
+      {relatedEl}
     </div>
   );
 }

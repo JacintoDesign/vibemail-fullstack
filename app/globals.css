@@ -182,10 +182,86 @@ body.vm-col-dragging * {
   user-select: none !important;
 }
 
+.vm-row-resizer {
+  display: block;
+  width: 100%;
+  height: 11px;
+  padding: 0;
+  border: none;
+  flex-shrink: 0;
+  cursor: ns-resize;
+  position: relative;
+  z-index: 0;
+  background: transparent;
+  touch-action: none;
+}
+.vm-row-resizer::after {
+  content: "";
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  top: 4px;
+  height: 3px;
+  border-radius: var(--radius-full);
+  background: var(--border-default);
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+.vm-row-resizer:hover::after,
+.vm-row-resizer.dragging::after {
+  background: var(--accent);
+}
+body.vm-row-dragging {
+  cursor: ns-resize;
+  user-select: none;
+}
+body.vm-row-dragging * {
+  user-select: none !important;
+}
+
 /* ── Thread reader header — inline ↔ stacked via container query ────────── */
 .vm-thread-reader {
   container-type: inline-size;
   container-name: vmthread;
+}
+.vm-read-split {
+  flex: 1;
+  min-width: var(--thread-min);
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-wrap: wrap;
+  container-type: inline-size;
+  container-name: vmread;
+}
+@container vmread (max-width: 640px) {
+  .vm-thread-reader {
+    flex: 1 1 100%;
+  }
+  .vm-related-rail {
+    flex: 1 1 100%;
+    width: 100% !important;
+    height: auto !important;
+    max-height: 42%;
+    border-left: none !important;
+    border-top: 1px solid var(--border-hairline) !important;
+    margin-top: 8px;
+    background: transparent;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .vm-related-rail.is-collapsed {
+    max-height: none;
+    align-items: stretch !important;
+  }
+  .vm-related-rail.is-collapsed .vm-related-head {
+    flex-direction: row !important;
+    gap: 4px !important;
+    padding: 16px 8px 12px !important;
+  }
+  .vm-related-rail.is-collapsed .vm-related-label {
+    writing-mode: horizontal-tb !important;
+    flex: 1;
+  }
 }
 .vm-thread-head {
   display: grid;
@@ -193,8 +269,8 @@ body.vm-col-dragging * {
   grid-template-areas: "title actions collapse" "meta meta meta";
   column-gap: 8px;
   row-gap: 5px;
-  align-items: center;
-  padding: 16px 22px;
+  align-items: start;
+  padding: 16px 22px 12px;
   border-bottom: 1px solid var(--border-hairline);
 }
 .vm-thread-title {
@@ -216,13 +292,15 @@ body.vm-col-dragging * {
   display: flex;
   align-items: center;
   gap: 4px;
-  align-self: center;
+  align-self: start;
+  height: 28px;
 }
 .vm-thread-collapse {
   grid-area: collapse;
   display: flex;
   align-items: center;
-  align-self: center;
+  align-self: start;
+  height: 28px;
 }
 .vm-thread-meta {
   grid-area: meta;
@@ -236,7 +314,7 @@ body.vm-col-dragging * {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas: "title collapse" "actions actions" "meta meta";
     row-gap: 12px;
-    align-items: center;
+    align-items: start;
   }
   .vm-thread-title {
     display: block;
