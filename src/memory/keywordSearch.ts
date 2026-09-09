@@ -76,6 +76,97 @@ export function keywordTerms(query: string): string[] {
     .filter((t) => t.length >= 3 && !STOP.has(t))
 }
 
+/**
+ * Distinctive tokens for buried-chunk lookup. Hyphenated names (`e-certify`)
+ * at 8+ characters, or plain tokens at 11+ (`certificates`, `photosynthesis`).
+ * Short common words (`image`, `generation`) stay out so this cannot crowd
+ * out semantic ranking.
+ */
+export function rareLexicalTerms(query: string): string[] {
+  const seen = new Set<string>()
+  const terms: string[] = []
+  for (const raw of query.toLowerCase().split(/\s+/)) {
+    const t = raw.replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, '').replace(/'/g, '')
+    if (!t || STOP.has(t) || seen.has(t)) continue
+    const rare = t.includes('-') ? t.length >= 8 : t.length >= 11
+    if (!rare) continue
+    seen.add(t)
+    terms.push(t)
+  }
+  return terms
+}
+
+/**
+ * Messages whose stored chunk_text contains a rare query token. Finds a fact
+ * buried past the first 1500 characters when the vector floor ranks other
+ * mail higher.
+ */
+export async function searchChunksByRareTerms(
+  userId: string,
+  query: string,
+  limit = 8,
+): Promise<Message[]> {
+  const terms = rareLexicalTerms(query)
+  if (terms.length === 0) return []
+
+  const clauses = terms.flatMap((raw) => {
+    const t = raw.replace(/[,()]/g, '')
+    return t ? [`chunk_text.ilike.%${t}%`] : []
+  })
+  if (clauses.length === 0) return []
+
+  const { data, error } = await getClient()
+    .from('message_chunks')
+    .select('message_id')
+    .eq('user_id', userId)
+    .or(clauses.join(','))
+    .limit(limit * 4)
+
+  if (error) {
+    throw new ProviderError('SEARCH_FAILED', error.message, error)
+  }
+
+  const ids: string[] = []
+  const seen = new Set<string>()
+  for (const row of data ?? []) {
+    if (seen.has(row.message_id)) continue
+    seen.add(row.message_id)
+    ids.push(row.message_id)
+    if (ids.length >= limit) break
+  }
+  if (ids.length === 0) return []
+
+  const { data: messages, error: msgError } = await getClient()
+    .from('messages')
+    .select('*')
+    .eq('user_id', userId)
+    .in('id', ids)
+
+  if (msgError) {
+    throw new ProviderError('SEARCH_FAILED', msgError.message, msgError)
+  }
+
+  const byId = new Map(((messages ?? []) as DbMessageRow[]).map((row) => [row.id, row]))
+  return ids
+    .map((id) => byId.get(id))
+    .filter((row): row is DbMessageRow => row !== undefined)
+    .filter((row) => row.status !== 'trash' && row.status !== 'draft')
+    .map(rowToMessage)
+}
+
+/** Rare chunk hits first (buried exact terms), then vector hits. One row per message. */
+export function mergeRetrieval(preferred: Message[], rest: Message[], cap: number): Message[] {
+  const out: Message[] = []
+  const seen = new Set<string>()
+  for (const message of [...preferred, ...rest]) {
+    if (seen.has(message.id)) continue
+    seen.add(message.id)
+    out.push(message)
+    if (out.length >= cap) break
+  }
+  return out
+}
+
 async function ilikeAny(userId: string, terms: string[], limit: number): Promise<Message[]> {
   const clauses = terms.flatMap((raw) => {
     const t = raw.replace(/[,()]/g, '')

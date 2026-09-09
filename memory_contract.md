@@ -89,7 +89,7 @@ Between two messages of similar relevance, the more recent one ranks higher. Thi
 
 Return at most **8 messages** after collapsing chunks, and discard anything below a similarity threshold.
 
-Both the result count and the threshold are **starting values**, not settled numbers.
+Measured on a live mailbox (TEST_PLAN.md §5): on-topic questions scored about **−0.85 to −0.89** (`<#>` distance, lower is better); unrelated mail started around **−0.81**. Search keeps the floor at **−0.82**. Digest uses the same floor so an unmatched topic returns nothing, and a count of **12** (not 20) so extra slots do not just repeat the same sender.
 
 ---
 

@@ -39,7 +39,9 @@ export async function answerFromMessages(
     const text = result.text?.trim()
     return { text: text ? text : null, unavailable: false }
   } catch {
-    return { text: null, unavailable: false }
+    // Invalid keys, outages, and quota all look the same to the user: show
+    // the list with the quiet note, never an error (MEMORY_CONTRACT.md §5).
+    return { text: null, unavailable: true }
   }
 }
 

@@ -233,9 +233,30 @@ body.vm-row-dragging * {
   container-type: inline-size;
   container-name: vmread;
 }
-@container vmread (max-width: 640px) {
+/* Reading pane too narrow for thread + 248px rail: related sits under the thread. */
+.vm-read-split.is-stacked {
+  flex-direction: column;
+  flex-wrap: nowrap;
+}
+.vm-read-split.is-stacked .vm-thread-reader {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  height: auto !important;
+}
+.vm-read-split.is-stacked .vm-related-rail {
+  flex: 0 1 auto;
+  width: 100% !important;
+  height: auto !important;
+  max-height: 42%;
+  border-left: none !important;
+  border-top: 1px solid var(--border-hairline) !important;
+  margin-top: 0;
+}
+@container vmread (max-width: 628px) {
   .vm-thread-reader {
-    flex: 1 1 100%;
+    flex: 1 1 100% !important;
+    width: 100%;
   }
   .vm-related-rail {
     flex: 1 1 100%;

@@ -277,7 +277,7 @@ describe('GET /api/v1/messages/semantic', () => {
     expect(body.messages.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('200 — when reason throws, still returns messages and no answer', async () => {
+  it('200 — when reason throws, still returns messages, no answer, and the unavailable flag', async () => {
     reason.mockRejectedValue(new Error('model overloaded'));
     const { state, res } = mockRes();
     await handler(
@@ -295,7 +295,7 @@ describe('GET /api/v1/messages/semantic', () => {
       reasonUnavailable: boolean;
     };
     expect(body.answer).toBeNull();
-    expect(body.reasonUnavailable).toBe(false);
+    expect(body.reasonUnavailable).toBe(true);
     expect(body.messages.length).toBeGreaterThanOrEqual(1);
   });
 });

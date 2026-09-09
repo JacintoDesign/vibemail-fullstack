@@ -332,7 +332,7 @@ export async function demoFetch<T>(path: string, init?: RequestInit): Promise<T>
       // Demo has no vectors; overlap tokens and cap at live retrieval's count.
       const hits = semanticHits(rows, rawQ).filter((m) => m.status !== "trash" && m.status !== "draft");
       if (segments[1] === "digest") {
-        const wide = hits.slice(0, 20);
+        const wide = hits.slice(0, 12);
         if (wide.length === 0) {
           return ok({ ...page([]), digest: null, reasonUnavailable: false });
         }

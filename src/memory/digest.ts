@@ -6,14 +6,16 @@ import { searchByMeaning } from './retrieve'
 /**
  * Wider than search (`MATCH_COUNT` = 8). Digest is breadth — every matching
  * newsletter stays a source, including several that covered the same launch.
+ * 12, not 20: on a real mailbox new senders stop appearing after ~5 and 20
+ * just repeats the same Design issues (TEST_PLAN.md §5.5).
  */
-export const DIGEST_COUNT = 20
+export const DIGEST_COUNT = 12
 
 /**
- * Slightly looser than MATCH_THRESHOLD so near-miss coverage still comes in.
- * Still a `<#>` distance: lower is better.
+ * Same `<#>` floor as search. A looser digest floor (−0.75) admitted unrelated
+ * mail around −0.80 and filled the empty path with 20 noise sources.
  */
-export const DIGEST_THRESHOLD = -0.75
+export const DIGEST_THRESHOLD = -0.82
 
 /** Short excerpt sent to the reasoner — not the whole newsletter. */
 export const EXCERPT_CHARS = 500

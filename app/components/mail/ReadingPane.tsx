@@ -2,7 +2,7 @@
 
 // Right column: thread reader + empty placeholder. Ported from ReadingPane.jsx.
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Badge, Button, Icon, IconButton } from "@/components/ds";
 import type { Message } from "@/lib/types";
 import { ChromeBtn } from "./PanelChrome";
@@ -28,6 +28,11 @@ export interface ReadingPaneProps {
   onMenu?: () => void;
   onBack?: () => void;
 }
+
+/** Side rail is 248px (`RelatedPanel`); thread min is `--thread-min` (380px). */
+const RELATED_RAIL_PX = 248;
+const THREAD_MIN_PX = 380;
+const STACK_RELATED_BELOW_PX = RELATED_RAIL_PX + THREAD_MIN_PX;
 
 const quickReplyStyle = {
   display: "flex",
@@ -138,9 +143,27 @@ function ThreadReader({
   onMenu,
   onBack,
 }: ReadingPaneProps & { message: Message }) {
+  const splitRef = useRef<HTMLDivElement>(null);
+  const [stackRelated, setStackRelated] = useState(!!mobile);
+  useLayoutEffect(() => {
+    if (mobile) {
+      setStackRelated(true);
+      return;
+    }
+    const el = splitRef.current;
+    if (!el) return;
+    const update = () => {
+      setStackRelated(el.getBoundingClientRect().width < STACK_RELATED_BELOW_PX);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [mobile]);
+
   const relatedEl =
     related.length > 0 && onOpenRelated ? (
-      <RelatedPanel messages={related} onOpen={onOpenRelated} stacked={mobile} />
+      <RelatedPanel messages={related} onOpen={onOpenRelated} stacked={!!mobile || stackRelated} />
     ) : null;
   const thread = message.thread || [];
   const [openSet, setOpenSet] = useState<Set<number>>(() => new Set([thread.length - 1]));
@@ -299,10 +322,19 @@ function ThreadReader({
   );
 
   return (
-    <div className="vm-read-split">
+    <div
+      ref={splitRef}
+      className={stackRelated ? "vm-read-split is-stacked" : "vm-read-split"}
+    >
       <div
         className="vm-thread-reader"
-        style={{ flex: 1, minWidth: 0, height: "100%", display: "flex", flexDirection: "column" }}
+        style={{
+          flex: 1,
+          minWidth: 0,
+          height: stackRelated ? undefined : "100%",
+          display: "flex",
+          flexDirection: "column",
+        }}
       >
         <div className="vm-thread-head">
           <h1 className="vm-thread-title">{message.subject || "(no subject)"}</h1>

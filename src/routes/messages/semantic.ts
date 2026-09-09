@@ -1,8 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { verifyJwt } from '../../middleware/jwt';
 import { errorResponse, handleError } from '../../middleware/error';
-import { searchByMeaning } from '../../memory/retrieve';
-import { searchByKeyword } from '../../memory/keywordSearch';
+import { MATCH_COUNT, searchByMeaning } from '../../memory/retrieve';
+import {
+  mergeRetrieval,
+  searchByKeyword,
+  searchChunksByRareTerms,
+} from '../../memory/keywordSearch';
 import { needsReasoning } from '../../memory/needsReasoning';
 import { answerFromMessages } from '../../memory/answerFromMessages';
 
@@ -36,9 +40,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
   try {
     const query = q.trim();
-    const semanticHits = await searchByMeaning(payload.sub, query);
+    const [semanticHits, rareHits] = await Promise.all([
+      searchByMeaning(payload.sub, query),
+      searchChunksByRareTerms(payload.sub, query, MATCH_COUNT),
+    ]);
+    const merged = mergeRetrieval(rareHits, semanticHits, MATCH_COUNT);
 
-    if (semanticHits.length === 0) {
+    if (merged.length === 0) {
       const messages = await searchByKeyword(payload.sub, query);
       res.status(200).json({
         messages,
@@ -53,13 +61,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     let answer: string | null = null;
     let reasonUnavailable = false;
     if (needsReasoning(query)) {
-      const grounded = await answerFromMessages(query, semanticHits);
+      const grounded = await answerFromMessages(query, merged);
       answer = grounded.text;
       reasonUnavailable = grounded.unavailable;
     }
 
     res.status(200).json({
-      messages: semanticHits,
+      messages: merged,
       nextCursor: null,
       answer,
       reasonUnavailable,

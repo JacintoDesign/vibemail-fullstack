@@ -82,11 +82,11 @@ describe('answerFromMessages', () => {
     })
   })
 
-  it('returns no text when the provider throws, without claiming quota', async () => {
+  it('returns no text and marks unavailable when the provider throws', async () => {
     reason.mockRejectedValue(new Error('down'))
     await expect(answerFromMessages('what happened?', [msg()])).resolves.toEqual({
       text: null,
-      unavailable: false,
+      unavailable: true,
     })
   })
 })
