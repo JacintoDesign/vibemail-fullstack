@@ -9,8 +9,12 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "types": ["node"]
   },
-  "include": ["src/**/*", "api/**/*"],
+  "ts-node": {
+    "files": true
+  },
+  "include": ["src/**/*", "api/**/*", "scripts/**/*"],
   "exclude": ["node_modules", "dist"]
 }
