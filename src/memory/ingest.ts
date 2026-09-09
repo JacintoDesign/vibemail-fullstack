@@ -19,25 +19,6 @@ export interface ExistingMessageContent {
   bodyPlain: string | null
 }
 
-interface MessageChunkRow {
-  message_id: string
-  user_id: string
-  chunk_index: number
-  chunk_text: string
-  embedding: string
-}
-
-interface ChunksTable {
-  delete: () => {
-    eq: (column: string, value: string) => PromiseLike<{ error: { message: string } | null }>
-  }
-  insert: (rows: MessageChunkRow[]) => PromiseLike<{ error: { message: string } | null }>
-}
-
-function chunksTable(): ChunksTable {
-  return getClient().from('message_chunks' as 'messages') as unknown as ChunksTable
-}
-
 /**
  * Snapshot subject/body by gmail_id so callers can skip re-embed on
  * label-only upserts (memory_contract.md §4).
@@ -134,13 +115,13 @@ export async function ingestMessageChunks(input: IngestMessageInput): Promise<vo
   const embeddings = await Promise.all(chunks.map((chunk) => embedText(chunk.text)))
 
   const { error: deleteError } = await withWriteRetry(() =>
-    chunksTable().delete().eq('message_id', input.messageId),
+    getClient().from('message_chunks').delete().eq('message_id', input.messageId),
   )
   if (deleteError) {
     throw new ProviderError('CHUNK_DELETE_FAILED', deleteError.message, deleteError)
   }
 
-  const rows: MessageChunkRow[] = chunks.map((chunk, i) => {
+  const rows = chunks.map((chunk, i) => {
     const embedding = embeddings[i]
     if (!embedding) {
       throw new ProviderError('EMBED_FAILED', `Missing embedding for chunk ${chunk.index}`)
@@ -154,7 +135,9 @@ export async function ingestMessageChunks(input: IngestMessageInput): Promise<vo
     }
   })
 
-  const { error: insertError } = await withWriteRetry(() => chunksTable().insert(rows))
+  const { error: insertError } = await withWriteRetry(() =>
+    getClient().from('message_chunks').insert(rows),
+  )
   if (insertError) {
     throw new ProviderError('CHUNK_INSERT_FAILED', insertError.message, insertError)
   }
