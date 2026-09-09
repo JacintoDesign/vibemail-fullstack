@@ -39,77 +39,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      messages: {
-        Row: {
-          body_html: string | null
-          body_plain: string | null
-          created_at: string
-          date: string
-          draft_id: string | null
-          from_address: string
-          gmail_id: string
-          id: string
-          is_read: boolean
-          is_starred: boolean
-          label_ids: string[]
-          snippet: string
-          status: string
-          subject: string
-          thread_id: string
-          to_address: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          body_html?: string | null
-          body_plain?: string | null
-          created_at?: string
-          date?: string
-          draft_id?: string | null
-          from_address: string
-          gmail_id: string
-          id?: string
-          is_read?: boolean
-          is_starred?: boolean
-          label_ids?: string[]
-          snippet?: string
-          status?: string
-          subject?: string
-          thread_id: string
-          to_address: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          body_html?: string | null
-          body_plain?: string | null
-          created_at?: string
-          date?: string
-          draft_id?: string | null
-          from_address?: string
-          gmail_id?: string
-          id?: string
-          is_read?: boolean
-          is_starred?: boolean
-          label_ids?: string[]
-          snippet?: string
-          status?: string
-          subject?: string
-          thread_id?: string
-          to_address?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "messages_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       message_chunks: {
         Row: {
           chunk_index: number
@@ -148,6 +77,80 @@ export type Database = {
           },
           {
             foreignKeyName: "message_chunks_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      messages: {
+        Row: {
+          attachments: Json
+          body_html: string | null
+          body_plain: string | null
+          created_at: string
+          date: string
+          draft_id: string | null
+          from_address: string
+          gmail_id: string
+          id: string
+          is_read: boolean
+          is_starred: boolean
+          label_ids: string[]
+          snippet: string
+          status: string
+          subject: string
+          thread_id: string
+          to_address: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          attachments?: Json
+          body_html?: string | null
+          body_plain?: string | null
+          created_at?: string
+          date?: string
+          draft_id?: string | null
+          from_address: string
+          gmail_id: string
+          id?: string
+          is_read?: boolean
+          is_starred?: boolean
+          label_ids?: string[]
+          snippet?: string
+          status?: string
+          subject?: string
+          thread_id: string
+          to_address: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          attachments?: Json
+          body_html?: string | null
+          body_plain?: string | null
+          created_at?: string
+          date?: string
+          draft_id?: string | null
+          from_address?: string
+          gmail_id?: string
+          id?: string
+          is_read?: boolean
+          is_starred?: boolean
+          label_ids?: string[]
+          snippet?: string
+          status?: string
+          subject?: string
+          thread_id?: string
+          to_address?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
@@ -205,7 +208,35 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      match_messages: {
+        Args: {
+          p_match_count?: number
+          p_match_threshold: number
+          p_query_embedding: string
+          p_user_id: string
+        }
+        Returns: {
+          body_html: string
+          body_plain: string
+          created_at: string
+          date: string
+          draft_id: string
+          from_address: string
+          gmail_id: string
+          id: string
+          is_read: boolean
+          is_starred: boolean
+          label_ids: string[]
+          score: number
+          snippet: string
+          status: string
+          subject: string
+          thread_id: string
+          to_address: string
+          updated_at: string
+          user_id: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
@@ -224,12 +255,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -253,11 +284,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -278,11 +309,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -303,11 +334,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -320,11 +351,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
