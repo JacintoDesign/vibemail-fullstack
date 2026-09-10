@@ -1,6 +1,6 @@
 # VibeMail
 
-A full-stack **Gmail data-liberation engine** with a glassmorphic email client on top of it. VibeMail extracts your Gmail data via OAuth 2.0 into your own Supabase PostgreSQL database, keeps it in sync in real time through Gmail Pub/Sub push notifications (no polling), and exposes it through a typed REST API. A Next.js single-page app consumes that API as a fast, keyboard-driven mail client.
+A full-stack **Gmail data-liberation engine** with a glassmorphic email client on top of it. VibeMail extracts your Gmail data via OAuth 2.0 into your own Supabase PostgreSQL database, keeps it in sync in real time through Gmail Pub/Sub push notifications (no polling), and exposes it through a typed REST API. Mail is chunked and embedded so you can search by meaning, brief a topic from the archive, and surface related messages. A Next.js single-page app consumes that API as a fast, keyboard-driven mail client.
 
 The whole thing — API + web UI — deploys as a single Vercel project.
 
@@ -14,6 +14,7 @@ The whole thing — API + web UI — deploys as a single Vercel project.
 - [Repository layout](#repository-layout)
 - [Data model](#data-model)
 - [The sync engine](#the-sync-engine)
+- [The memory layer](#the-memory-layer)
 - [REST API](#rest-api)
 - [Frontend](#frontend)
 - [Prerequisites](#prerequisites)
@@ -36,6 +37,7 @@ The whole thing — API + web UI — deploys as a single Vercel project.
 - Real-time ingestion via **Gmail Pub/Sub push webhooks** — a notification delivers a `historyId`, the sync layer calls `history.list` for the delta. No polling, ever.
 - **Backfill** older history beyond the initial seed, and **reconcile** to drop stale labels so the local inbox tracks Gmail exactly.
 - Full REST API at `/api/v1`: list, read, send, search, threads, drafts, labels, attachments.
+- **Memory layer:** every message is chunked and embedded (GTE-small, 384-d) into `message_chunks`. Semantic search, topic digests, and a related-mail rail all retrieve **messages**, never chunks.
 - Daily cron renews the Gmail watch before it expires (~7 days).
 
 **Frontend (the mail client)**
@@ -43,7 +45,7 @@ The whole thing — API + web UI — deploys as a single Vercel project.
 - Read / star / archive / trash / mark-unread, add & remove labels, bulk actions.
 - Compose, reply-in-thread, drafts (create / edit / send / delete), attachments (upload & download).
 - Cursor-paginated message list with background auto-sync that fills the inbox to its true size.
-- Cmd-K search, keyboard shortcuts, pop-out thread windows.
+- Cmd-K search (keyword lookups, or questions that search by meaning and optionally answer from the hits), a digest toggle for topic briefs, related-mail rail on an open message, keyboard shortcuts, pop-out thread windows.
 
 ---
 
@@ -63,15 +65,16 @@ The whole thing — API + web UI — deploys as a single Vercel project.
    └────────────┘                   └──────┬───────┘                └─────────┘
                                            │ @supabase/supabase-js (service role)
                                            ▼
-                                    ┌──────────────┐
-                                    │  Supabase    │  users + messages
-                                    │  PostgreSQL  │  + Storage (attachments)
+                                    ┌──────────────┐     POST /functions/v1/embed
+                                    │  Supabase    │ ◀── GTE-small (384-d, unit-norm)
+                                    │  PostgreSQL  │  users + messages + chunks
+                                    │  + pgvector  │  + Storage (attachments)
                                     └──────────────┘
 ```
 
 The TypeScript codebase compiles from **two source roots**, kept deliberately thin:
 
-- **`src/`** — all business logic (provider abstraction → Gmail OAuth + token persistence → sync/read → Pub/Sub webhook → send/drafts → attachments).
+- **`src/`** — all business logic (provider abstraction → Gmail OAuth + token persistence → sync/read → Pub/Sub webhook → send/drafts → attachments → memory ingest/retrieve).
 - **`api/`** — Vercel Function entry points only. One file per route; thin handlers that authenticate, validate, call into `src/`, and return the response envelope. No business logic.
 - **`app/`** — the Next.js App-Router frontend. It talks to `api/` over the relative `/api/v1` base path, so the SPA and API are same-origin.
 
@@ -87,7 +90,9 @@ Everything ships as **Vercel Serverless Functions** (no Express server). `vercel
 | Language | TypeScript (strict mode) |
 | Frontend | Next.js 15 (App Router), React 19, Motion, lucide-react |
 | Gmail integration | `googleapis` — OAuth 2.0 client + Gmail API |
-| Database / Storage | Supabase (PostgreSQL + Storage), `@supabase/supabase-js` v2 |
+| Database / Storage | Supabase (PostgreSQL + Storage + pgvector), `@supabase/supabase-js` v2 |
+| Embeddings | GTE-small (384-d) via Supabase Edge Function `/functions/v1/embed` |
+| Reasoning | Gemini (`@google/genai`) — grounded answers/digests; optional, degrades to the list |
 | Auth | Google OAuth 2.0 → HS256 JWT (`jsonwebtoken`) |
 | Token encryption | AES-256-GCM (Node `crypto`) |
 | Testing | Jest + Supertest + `ts-jest` (live Supabase, mocked Gmail) |
@@ -102,9 +107,7 @@ vibemail-fullstack/
 ├── api/                          # Vercel Function entry points (one file per route)
 │   ├── v1/
 │   │   ├── auth/google/          # OAuth initiate + callback
-│   │   ├── messages.ts           # GET list · POST send
-│   │   ├── messages/[id]/        # GET/PATCH/DELETE message · POST/DELETE labels
-│   │   ├── messages/search.ts    # GET search
+│   │   ├── messages.ts           # /messages tree (list/send/search/semantic/digest/related/item/labels)
 │   │   ├── threads/[threadId].ts # GET thread (oldest-first)
 │   │   ├── drafts.ts             # POST create draft
 │   │   ├── drafts/[id]/          # PATCH update · DELETE · POST send
@@ -119,6 +122,9 @@ vibemail-fullstack/
 │   ├── sync/                     # initial sync, backfill, reconcile, normalize
 │   ├── send/                     # RFC-2822 compose + send
 │   ├── attachments/              # Supabase Storage signed up/downloads
+│   ├── memory/                   # chunk, ingest, retrieve, keyword merge, citations
+│   ├── reason/                   # Gemini grounded answers (optional)
+│   ├── routes/messages/          # list/send/search/semantic/digest/related handlers
 │   ├── webhook/gmail.ts          # history.list delta processing
 │   ├── cron/renewWatch.ts        # watch-renewal logic
 │   ├── db/                       # Supabase data layer (service-role)
@@ -129,14 +135,17 @@ vibemail-fullstack/
 │   ├── page.tsx, layout.tsx      # entry + root layout
 │   ├── auth/callback/            # OAuth redirect lands here, extracts the JWT
 │   ├── components/               # VibeMailApp shell, ds/ design system, mail/ views
-│   ├── lib/                      # api-client, api, data-source, auth, types
+│   ├── lib/                      # api-client, api, data-source, auth, types, needs-reasoning
 │   ├── providers/                # AuthProvider, SettingsProvider
 │   └── styles/ + globals.css     # tokens, glass module, theme
 │
 ├── tests/                        # Jest suite (integration + unit)
 ├── migrations/                   # Supabase schema SQL (owned by the schema branch)
+├── supabase/functions/embed/     # GTE-small Edge Function (one string → 384-d vector)
+├── scripts/backfill-embeddings.ts  # resumable local chunk/embed backfill
 ├── docs/                         # design specs + Postman collection
 ├── CONTRACT.md                   # API contract — single source of truth
+├── memory_contract.md            # chunking, retrieval, ownership, degradation
 ├── build_sequence.md             # the 7 atomic build units
 ├── vercel.json                   # rewrites + cron
 ├── tsconfig.json                 # backend (src/ + api/)
@@ -161,6 +170,8 @@ One row per Gmail message per user in the `messages` table, normalized to the `M
 
 `status` and `draftId` are **server-managed only**. The `messages` table is indexed for newest-first pagination (`user_id, created_at DESC`), label filtering (GIN on `label_ids`), thread lookups, and status filtering. Row-Level Security is enabled as defence-in-depth (the server uses the service-role key, which bypasses it).
 
+**`message_chunks`** stores the memory index: one row per embedding slice of a message (`message_id`, `chunk_index`, `chunk_text`, 384-d `embedding`). Chunks cascade-delete with the parent message. Callers never see chunk rows — retrieval always collapses to messages (see [The memory layer](#the-memory-layer)).
+
 ---
 
 ## The sync engine
@@ -174,9 +185,53 @@ Message data flows in through four independent mechanisms that together keep Sup
 | **Backfill** | `POST /api/v1/sync/backfill` | Resumable, capped walk of **older** INBOX history beyond the seed. Resume state (Gmail `pageToken` + running count) is encoded in the returned cursor — the cap is enforced statelessly, so no extra schema is needed. Idempotent (`upsert` on `gmail_id`). |
 | **Reconcile** | `POST /api/v1/sync/reconcile` | Lists Gmail's *live* inbox (ids only — cheap) and strips the `INBOX` label from rows Gmail no longer lists (archived/trashed), recomputing `status`. Self-sent mail (`SENT`+`INBOX`) is preserved. Closes the gap that append-only sync can't see. |
 
-In the UI these are wired together: the inbox **auto-completes in the background** up to its true size (backfill the gap, page the rest from the DB), and **reconciles on entry/refresh** so the loaded count matches Gmail. The Gmail watch is renewed daily by a Vercel cron (`api/cron/renew-watch.ts`, schedule `0 6 * * *`) before its ~7-day expiry.
+In the UI these are wired together: the inbox **auto-completes in the background** up to its true size (backfill the gap, page the rest from the DB), and **reconciles on entry/refresh** so the loaded count matches Gmail. The Gmail watch is renewed daily by a Vercel cron (`api/cron/renew-watch.ts`, schedule `0 6 * * *`) before its ~7-day expiry. After each write, messages whose **subject or body changed** are chunked and embedded (see [The memory layer](#the-memory-layer)).
 
 > **Never poll.** All ingestion of *new* mail is event-driven via Pub/Sub. Backfill/reconcile are explicit, on-demand, bounded operations.
+
+---
+
+## The memory layer
+
+Mail in Supabase is searchable by **meaning**, not only by keyword. The contract is [`memory_contract.md`](memory_contract.md): the **base unit is the message**, the **storage unit is a chunk**, and every retrieval path returns messages only.
+
+### Chunking & embeddings
+
+Long bodies cannot fit in one GTE-small pass (~2000 characters / 512 tokens), so each message is split into overlapping slices and embedded separately:
+
+| Parameter | Value |
+|---|---|
+| Target chunk size | 1500 characters (not tokens) |
+| Overlap | 200 characters |
+| Composed chunk | sender + subject + slice, must stay ≤ 2000 characters |
+| Model | GTE-small, 384 dimensions, English, unit-normalized |
+| Index | HNSW inner product (`vector_ip_ops` / `<#>`; lower is better, a strong match sits near −1) |
+
+Every chunk repeats the sender and subject so no slice is context-free. The **`/functions/v1/embed`** Edge Function takes one string and returns one vector — it does not chunk mail, write to the database, or know a user. The Node app owns the rest: split → embed with bounded concurrency (3 in flight) and retries → delete that message's old chunks → insert the new ones.
+
+Live writes (sync, webhook, send, draft create/update) call the same ingest helper. Label-only upserts and read/star flips **skip** re-embed. Subject or body edits **delete-and-rebuild**. Message delete cascades to chunks.
+
+### Retrieval
+
+`match_messages` runs in Postgres so the HNSW index can serve it. Chunks are scored; a message's score is its best chunk. Ownership is an explicit `user_id` argument (JWT `sub`) — **not** RLS / `auth.uid()`, because the server uses the service-role key. A gentle recency nudge prefers newer mail among near-ties. Hits worse than **−0.82** (`<#>` distance) are discarded.
+
+Semantic search also merges **rare lexical terms** (distinctive tokens buried deep in a long body that vectors alone can miss) ahead of vector hits, then falls back to keyword search when nothing clears the floor.
+
+### Features
+
+| Feature | Endpoint | What it does |
+|---|---|---|
+| **Semantic search** | `GET /api/v1/messages/semantic?q=` | Embed the query, return up to 8 messages. Questions / free-text prompts may get a grounded Gemini answer cited as `[n] Name`. Short bags of terms stay lookups (no reasoner). Empty retrieval falls back to keyword and never attaches an answer. |
+| **Digest** | `GET /api/v1/messages/digest?q=` | Wider retrieval (up to 12 sources, same −0.82 floor), then a multi-paragraph brief of matching newsletters. Empty retrieval never calls the model. |
+| **Related** | `GET /api/v1/messages/:id/related` | Neighbors of the open message by its **stored** embedding (does not call `/embed`). Caps at 4, drops the open message and its thread. Empty list → the UI hides the rail. |
+
+The UI search box only calls semantic search for questions and sentence-like prompts (`needsReasoning`). Short keyword bags go to `GET /api/v1/messages/search`. Digest is a toggle on the same search field, not a separate page.
+
+### Degradation & cold start
+
+- **Thin index:** while chunks are still filling in, features fall back to keyword search and never present a below-threshold match as a confident answer.
+- **Reasoner down / quota:** Gemini is optional. Search still returns the hit list (quiet note, no error). Digest lists matching newsletters instead of failing.
+- **Existing mail:** day-one embeddings are a **resumable local backfill** (`npm run embed:backfill`) — a Node script, not an Edge/Vercel Function, because those cap wall-clock time. Already-chunked messages are skipped; interrupt and re-run at any time.
 
 ---
 
@@ -194,11 +249,14 @@ In the UI these are wired together: the inbox **auto-completes in the background
 | GET | `/api/v1/messages` | List messages (`cursor`, `limit` 1–100, `labelId`, `status`) → `{ messages, nextCursor, endCursor }` |
 | POST | `/api/v1/messages` | Compose + send (optionally in-thread, with `attachmentIds`) |
 | GET | `/api/v1/messages/search` | Substring search over subject/from/snippet/to (`q`, `cursor`, `limit`) |
+| GET | `/api/v1/messages/semantic` | Search by meaning (`q`). Returns `{ messages, nextCursor, answer, reasonUnavailable, source }` — `source` is `semantic` or `keyword` (fallback) |
+| GET | `/api/v1/messages/digest` | Topic digest (`q`). Returns `{ messages, nextCursor, digest, reasonUnavailable }` |
 | GET | `/api/v1/messages/:id` | Fetch a single message |
 | PATCH | `/api/v1/messages/:id` | Actions: `read` / `starred` / `archived` / `trashed` (any combination) |
 | DELETE | `/api/v1/messages/:id` | Hard-delete a non-draft message (Gmail trash + row drop) |
 | POST | `/api/v1/messages/:id/labels` | Add a label |
 | DELETE | `/api/v1/messages/:id/labels` | Remove a label |
+| GET | `/api/v1/messages/:id/related` | Neighboring messages by stored embedding (no query embed) |
 | GET | `/api/v1/threads/:threadId` | All messages in a thread, oldest-first |
 | GET | `/api/v1/labels` | Gmail label catalog with per-label message/thread + unread counts |
 | POST | `/api/v1/drafts` | Create a Gmail draft (`status='draft'`, `draftId` populated) |
@@ -212,7 +270,7 @@ In the UI these are wired together: the inbox **auto-completes in the background
 | POST | `/webhook/gmail` | Pub/Sub push receiver — validates `GOOGLE_PUBSUB_VERIFICATION_TOKEN`, **no JWT** |
 | GET | `/api/cron/renew-watch` | Daily Gmail watch renewal (Vercel Cron) |
 
-Full request/response shapes and every typed error code live in **[`CONTRACT.md`](CONTRACT.md)**. A ready-to-import **[Postman collection](docs/vibemail-api.postman_collection.json)** is in `docs/`.
+Full request/response shapes and every typed error code live in **[`CONTRACT.md`](CONTRACT.md)**. Semantic search, digest, and related behavior is specified in **[`memory_contract.md`](memory_contract.md)**. A ready-to-import **[Postman collection](docs/vibemail-api.postman_collection.json)** is in `docs/`.
 
 ---
 
@@ -221,9 +279,10 @@ Full request/response shapes and every typed error code live in **[`CONTRACT.md`
 The `app/` SPA is the reference client for the API.
 
 - **Auth flow:** the OAuth callback redirects to `app/auth/callback/`, which extracts `?token=<jwt>` and stores it in `localStorage` under `vm-token`. Every request goes through `app/lib/api-client.ts`, which attaches `Authorization: Bearer <token>` and uses the relative `/api/v1` base.
-- **Data seam:** `app/lib/api.ts` (typed wrappers over every endpoint + wire→UI mappers) and `app/lib/data-source.ts` (folder/search fetchers, backfill & reconcile helpers) are the only modules that know the wire shape.
-- **Shell:** `app/components/VibeMailApp.tsx` holds mailbox state, pagination, the background auto-sync/reconcile, live-inbox polling, and compose/draft flows.
-- **Views:** `app/components/mail/` — `Sidebar`, `MessageList`, `ReadingPane`, `ComposeDrawer`, `ThreadWindow` (pop-outs), `BulkActionBar`, `LabelPicker`, `KeyboardHelp`.
+- **Data seam:** `app/lib/api.ts` (typed wrappers over every endpoint + wire→UI mappers) and `app/lib/data-source.ts` (folder/search/semantic/digest fetchers, backfill & reconcile helpers) are the only modules that know the wire shape.
+- **Shell:** `app/components/VibeMailApp.tsx` holds mailbox state, pagination, the background auto-sync/reconcile, live-inbox polling, compose/draft flows, and related-mail loading.
+- **Views:** `app/components/mail/` — `Sidebar`, `MessageList`, `ReadingPane`, `ComposeDrawer`, `ThreadWindow` (pop-outs), `BulkActionBar`, `LabelPicker`, `KeyboardHelp`, `SearchAnswerPanel` (grounded answer / digest), `RelatedPanel` (related-mail rail).
+- **Search:** Cmd-K. Keyword bags hit substring search; questions and longer prompts hit semantic search and may show a cited answer. A digest toggle on the same field briefs a topic from the archive. Opening a message loads related mail when anything clears the similarity floor.
 - **Design system:** `app/components/ds/` plus `app/styles/tokens.css` and `glass.module.css` — glassmorphic, light/dark, nebula background.
 
 ---
@@ -232,7 +291,8 @@ The `app/` SPA is the reference client for the API.
 
 - **Node.js 24+** and npm
 - A **Google Cloud** project with the Gmail API enabled, OAuth credentials, and a Pub/Sub topic
-- A **Supabase** project (URL + service-role key)
+- A **Supabase** project (URL + service-role key) with the `embed` Edge Function deployed
+- A **Gemini API key** if you want grounded answers and digests (search/related still work without it)
 - **Vercel CLI** (`npm i -g vercel`, or use the bundled dev dependency) for local full-stack dev
 
 ---
@@ -253,6 +313,8 @@ Copy `.env.example` and fill in. All secrets are consumed from the environment �
 | `JWT_SECRET` | HS256 signing secret for the session JWT |
 | `ENCRYPTION_KEY` | 64-char hex (32 bytes) — AES-256-GCM key for OAuth tokens at rest |
 | `FRONTEND_URL` | Where the OAuth callback redirects after issuing the JWT |
+| `GEMINI_API_KEY` | Gemini key for grounded search answers and digests (optional; features degrade without it) |
+| `GEMINI_MODEL` | Gemini model id (default in `.env.example`: `gemini-3.5-flash-lite`) |
 
 > Required Gmail OAuth scope: `https://www.googleapis.com/auth/gmail.modify`.
 
@@ -271,6 +333,8 @@ Copy `.env.example` and fill in. All secrets are consumed from the environment �
 
 1. Create a project; copy the URL and **service-role** key.
 2. Apply the schema (see [Database & migrations](#database--migrations)). The `attachments` Storage bucket is created automatically on first use.
+3. Deploy the embed Edge Function (`supabase/functions/embed`): `npx supabase functions deploy embed`. It must be callable as `POST { text }` → `{ embedding }` with the service-role Bearer.
+4. After mail is syncing, backfill embeddings for existing rows: `npm run embed:backfill` (resumable; pass `--batches=N` to cap a run).
 
 ### 3. Secrets
 
@@ -299,6 +363,7 @@ npm install
 | `npm run build` | Type-check/compile the backend (`tsc`) |
 | `npm run web:build` / `web:start` | Production Next build / start |
 | `npm test` | Jest suite (`--runInBand`) |
+| `npm run embed:backfill` | Chunk + embed messages that have no `message_chunks` yet (resumable) |
 | `npx tsc -p tsconfig.json --noEmit` | Type-check the backend |
 | `npx tsc -p tsconfig.next.json --noEmit` | Type-check the frontend |
 
@@ -315,6 +380,7 @@ Schema SQL lives in `migrations/`, applied in order:
 - `001_initial_schema.sql` — `users` + `messages` tables, `updated_at` triggers, indexes, RLS policies.
 - `002_add_status_and_draft_id.sql` — adds `status` + `draft_id`, backfills `status` from existing `label_ids`, adds supporting indexes.
 - `003_message_chunks.sql` — enables pgvector, creates `message_chunks` (384-d embeddings, unique `(message_id, chunk_index)`, HNSW inner-product index, RLS).
+- `004_match_messages.sql` — `match_messages(p_user_id, p_query_embedding, p_match_threshold, p_match_count)`: HNSW retrieval, chunk→message collapse, recency nudge. Ownership is `p_user_id` only (`SECURITY INVOKER`; never `auth.uid()`).
 
 Every migration is **idempotent** (`IF NOT EXISTS`, guarded policy creation, non-overlapping backfills) — running it twice is a no-op with no data loss.
 
@@ -336,8 +402,8 @@ npm test                              # full suite, serialized
 npx jest --testPathPatterns=reconcile # a single file by pattern
 ```
 
-- **Integration tests** (`tests/integration/`) run against a **live Supabase** test project (real user/message rows seeded and cleaned up) with the **Gmail API mocked** at the `googleapis` boundary and `loadOAuth2Client` stubbed.
-- **Unit tests** (`tests/unit/`) cover normalization, middleware, and raw-message building.
+- **Integration tests** (`tests/integration/`) run against a **live Supabase** test project (real user/message rows seeded and cleaned up) with the **Gmail API mocked** at the `googleapis` boundary and `loadOAuth2Client` stubbed. Memory routes (`messages.semantic`, `messages.digest`, `messages.related`) stub `/embed` the same way.
+- **Unit tests** (`tests/unit/`) cover normalization, middleware, raw-message building, and the memory helpers (chunk, ingest, retrieve merge, citations, `needsReasoning`).
 - Jest config: `ts-jest`, 30 s per-test timeout (live DB headroom), `clearMocks`/`restoreMocks` on.
 
 `npm test` must exit 0 with **zero failures and zero skips**, and `tsc --noEmit` must be clean, before any schema work merges (CONTRACT.md acceptance criteria AC-6/AC-7).
@@ -349,10 +415,10 @@ npx jest --testPathPatterns=reconcile # a single file by pattern
 Deploys as one **Vercel** project. `vercel.json` wires:
 
 - **Build:** `next build` (the `app/` SPA); `api/` functions are detected automatically.
-- **Rewrite:** `/webhook/gmail` → `/api/webhook/gmail` (so the public webhook path isn't under `/api/v1` and skips JWT auth — it validates the Pub/Sub token instead).
+- **Rewrite:** `/webhook/gmail` → `/api/webhook/gmail` (so the public webhook path isn't under `/api/v1` and skips JWT auth — it validates the Pub/Sub token instead). Semantic / digest / related / search / item / labels are rewritten onto the single `/api/v1/messages` function.
 - **Cron:** `GET /api/cron/renew-watch` daily at `0 6 * * *` (UTC) to renew the Gmail watch.
 
-Set every variable from [Environment variables](#environment-variables) in the Vercel project settings, point your Google OAuth redirect URI and Pub/Sub push subscription at the deployed domain, and apply the migrations to your Supabase project.
+Set every variable from [Environment variables](#environment-variables) in the Vercel project settings, point your Google OAuth redirect URI and Pub/Sub push subscription at the deployed domain, apply the migrations, and deploy the `embed` Edge Function on the same Supabase project.
 
 ---
 
@@ -362,15 +428,18 @@ Set every variable from [Environment variables](#environment-variables) in the V
 - **Service-role key is server-only** — there is no browser Supabase client; the SPA reaches data exclusively through the JWT-guarded API.
 - **Every endpoint except the OAuth callback requires a Bearer JWT.** The webhook validates a shared Pub/Sub token instead.
 - **No hardcoded credentials** — all secrets come from the environment.
-- **RLS enabled** on both tables as defence-in-depth.
+- **RLS enabled** on `users`, `messages`, and `message_chunks` as defence-in-depth. Memory retrieval still filters on an explicit `user_id` (JWT `sub`) inside SQL and application code — the service-role client bypasses RLS, so `auth.uid()` is never the ownership check.
+- **`/embed` is service-role only.** The Edge Function does not accept a user id and never returns mail.
 - **Typed error envelopes** never leak internals; unknown errors collapse to a generic 500.
 
 ---
 
 ## Key documents
 
-- **[`CONTRACT.md`](CONTRACT.md)** — the API contract: acceptance criteria, every endpoint's request/response shape and typed error codes, the `Message` data model, and the two-session rule. The single source of truth.
+- **[`CONTRACT.md`](CONTRACT.md)** — the API contract: acceptance criteria, every endpoint's request/response shape and typed error codes, the `Message` data model, and the two-session rule. The single source of truth for the mail API.
+- **[`memory_contract.md`](memory_contract.md)** — what gets embedded, chunk→message retrieval, ownership, when embeddings invalidate, and degradation.
+- **[`TEST_PLAN.md`](TEST_PLAN.md)** — live-mailbox checks for search, digest, related, and cross-user isolation.
 - **[`build_sequence.md`](build_sequence.md)** — the seven atomic build units, each with a verify check.
 - **[`CLAUDE.md`](CLAUDE.md)** — conventions and guardrails for working in this repo.
 - **[`docs/`](docs/)** — design specs and the Postman collection.
-```
+
