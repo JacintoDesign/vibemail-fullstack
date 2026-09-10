@@ -74,6 +74,19 @@ describe('answerFromMessages', () => {
     ])
   })
 
+  it('rewrites cited names to retrieved senders and drops unknown indices', async () => {
+    reason.mockResolvedValue({
+      text: 'Wired said 60 rpm [1] Wired, unlike [9] Stratechery.',
+      available: true,
+    })
+    const retrieved = msg()
+
+    await expect(answerFromMessages('did any newsletter mention rate limits?', [retrieved])).resolves.toEqual({
+      text: 'Wired said 60 rpm [1] Build Log, unlike.',
+      unavailable: false,
+    })
+  })
+
   it('marks unavailable when the provider reports quota exhaustion', async () => {
     reason.mockResolvedValue({ text: null, available: false })
     await expect(answerFromMessages('what happened?', [msg()])).resolves.toEqual({

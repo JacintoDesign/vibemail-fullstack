@@ -4,6 +4,9 @@
  * POST { text: string } → { embedding: number[] } (384-d, unit-normalized).
  * One string in, one vector out. Callers split messages and fan out.
  *
+ * Auth: gateway verify_jwt plus an in-function check that Authorization is
+ * the service-role Bearer. The function does not chunk mail or know a user.
+ *
  * The gte-small session is created once at module scope. Instantiating it
  * inside the handler re-initializes ONNX and costs seconds per request.
  *
@@ -30,6 +33,10 @@ Deno.serve(async (req) => {
 
   if (req.method !== 'POST') {
     return errorResponse(405, 'METHOD_NOT_ALLOWED', 'POST required')
+  }
+
+  if (!hasServiceRoleBearer(req)) {
+    return errorResponse(401, 'UNAUTHORIZED', 'Bearer token required')
   }
 
   let payload: unknown
@@ -98,6 +105,29 @@ function silenceDtypeWarning(): void {
       }
       original(...args)
     }
+  }
+}
+
+function hasServiceRoleBearer(req: Request): boolean {
+  const expected = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')?.trim()
+  const auth = (req.headers.get('Authorization') ?? '').trim()
+  const apikey = (req.headers.get('apikey') ?? '').trim()
+  const token = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : ''
+  if (expected && (token === expected || apikey === expected)) return true
+  return jwtRole(token) === 'service_role'
+}
+
+/** Gateway already verified the JWT; read `role` so anon keys cannot embed. */
+function jwtRole(token: string): string | undefined {
+  const payload = token.split('.')[1]
+  if (!payload) return undefined
+  try {
+    const padded = payload.replace(/-/g, '+').replace(/_/g, '/')
+    const b64 = padded + '='.repeat((4 - (padded.length % 4)) % 4)
+    const json = JSON.parse(atob(b64)) as { role?: unknown }
+    return typeof json.role === 'string' ? json.role : undefined
+  } catch {
+    return undefined
   }
 }
 

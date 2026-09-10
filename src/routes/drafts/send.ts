@@ -6,6 +6,7 @@ import { errorResponse, handleError } from '../../middleware/error';
 import { ProviderError } from '../../types/provider';
 import { loadOAuth2Client } from '../../providers/gmail/auth';
 import { resolveDraftId, isGmailNotFound } from '../../providers/gmail/drafts';
+import { ingestMessageChunks } from '../../memory/ingest';
 import { normalizeMessage, rowToMessage, DbMessageRow } from '../../sync/normalize';
 
 /**
@@ -110,6 +111,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       gmail_id:   sentGmailId,
       draft_id:   null,
       status:     'sent',
+      subject:    normalized.subject,
       label_ids:  normalized.labelIds,
       is_read:    normalized.isRead,
       is_starred: normalized.isStarred,
@@ -128,12 +130,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       throw new ProviderError('GMAIL_DRAFT_FAILED', updateError.message, updateError);
     }
 
+    const prevSubject = row.subject ?? '';
+    const prevBody = row.body_plain ?? '';
+    const nextSubject = normalized.subject ?? '';
+    const nextBody = normalized.bodyPlain ?? '';
+    if (prevSubject !== nextSubject || prevBody !== nextBody) {
+      await ingestMessageChunks({
+        messageId: row.id,
+        userId:    payload.sub,
+        sender:    normalized.from,
+        subject:   nextSubject,
+        body:      nextBody,
+      });
+    }
+
     // Build the response from the updated row shape.
     const updatedRow: DbMessageRow = {
       ...row,
       gmail_id:   sentGmailId,
       draft_id:   null,
       status:     'sent',
+      subject:    normalized.subject,
       label_ids:  normalized.labelIds,
       is_read:    normalized.isRead,
       is_starred: normalized.isStarred,

@@ -489,4 +489,86 @@ describe('POST /api/v1/drafts/:id/send', () => {
     expect(row.draft_id).toBeNull();
     expect(row.gmail_id).toBe(FAKE_SENT_ID);
   });
+
+  it('rebuilds chunks when the sent subject or body differs from the draft', async () => {
+    const sentId = `msg_sent_chunks_${Date.now()}`;
+    mockDraftsSend.mockResolvedValue({ data: { id: sentId } });
+    mockMessagesGet.mockResolvedValue({ data: { ...FAKE_FULL_SENT_MSG, id: sentId } });
+
+    const draft = await seedDraft();
+    const { data: before } = await getTestClient()
+      .from('messages')
+      .select('id')
+      .eq('gmail_id', draft.gmail_id)
+      .single();
+    const messageId = (before as { id: string }).id;
+
+    const { state, res } = mockRes();
+    await sendHandler(
+      mockReq({ method: 'POST', headers: { authorization: authHeader }, query: { id: draft.gmail_id } }),
+      res,
+    );
+    expect(state.statusCode).toBe(200);
+
+    const { data: chunks } = await getTestClient()
+      .from('message_chunks')
+      .select('chunk_text')
+      .eq('message_id', messageId);
+    const texts = (chunks ?? []).map((c) => c.chunk_text);
+    expect(texts.some((t) => t.includes('Sent subject'))).toBe(true);
+    expect(texts.some((t) => t.includes('Sent body'))).toBe(true);
+  });
+
+  it('skips re-embed when the sent subject and body are unchanged', async () => {
+    const sentId = `msg_sent_skip_${Date.now()}`;
+    mockDraftsSend.mockResolvedValue({ data: { id: sentId } });
+
+    const draft = await seedDraft();
+    const { data: row } = await getTestClient()
+      .from('messages')
+      .select('id, from_address, subject, body_plain')
+      .eq('gmail_id', draft.gmail_id)
+      .single();
+    const current = row as { id: string; from_address: string; subject: string; body_plain: string | null };
+
+    const { error: seedError } = await getTestClient().from('message_chunks').insert({
+      message_id: current.id,
+      user_id: testUserId,
+      chunk_index: 0,
+      chunk_text: 'OLD_CHUNK_TOKEN',
+      embedding: JSON.stringify(Array.from({ length: 384 }, () => 0)),
+    });
+    if (seedError) throw new Error(`seed chunk failed: ${seedError.message}`);
+
+    mockMessagesGet.mockResolvedValue({
+      data: {
+        ...FAKE_FULL_SENT_MSG,
+        id: sentId,
+        payload: {
+          headers: [
+            { name: 'From',    value: current.from_address },
+            { name: 'To',      value: 'recipient@example.com' },
+            { name: 'Subject', value: current.subject },
+            { name: 'Date',    value: new Date().toUTCString() },
+          ],
+          mimeType: 'text/plain',
+          body: { data: Buffer.from(current.body_plain ?? '').toString('base64url') },
+        },
+      },
+    });
+
+    const { state, res } = mockRes();
+    await sendHandler(
+      mockReq({ method: 'POST', headers: { authorization: authHeader }, query: { id: draft.gmail_id } }),
+      res,
+    );
+    expect(state.statusCode).toBe(200);
+
+    const { data: chunks } = await getTestClient()
+      .from('message_chunks')
+      .select('chunk_text')
+      .eq('message_id', current.id);
+    expect(chunks).toHaveLength(1);
+    expect(chunks?.[0]?.chunk_text).toBe('OLD_CHUNK_TOKEN');
+  });
 });

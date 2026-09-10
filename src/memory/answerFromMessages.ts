@@ -1,6 +1,7 @@
 import { reason } from '../reason'
 import type { Message } from '../types/message'
 import type { ReasonContextMessage } from '../types/reason'
+import { constrainCitedNames } from './citations'
 
 const SEARCH_SYSTEM = [
   'Answer the user using only the Context messages.',
@@ -37,7 +38,9 @@ export async function answerFromMessages(
     })
     if (!result.available) return { text: null, unavailable: true }
     const text = result.text?.trim()
-    return { text: text ? text : null, unavailable: false }
+    if (!text) return { text: null, unavailable: false }
+    const grounded = constrainCitedNames(text, messages)
+    return { text: grounded ? grounded : null, unavailable: false }
   } catch {
     // Invalid keys, outages, and quota all look the same to the user: show
     // the list with the quiet note, never an error (MEMORY_CONTRACT.md §5).

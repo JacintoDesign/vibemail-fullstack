@@ -368,7 +368,7 @@ allow_dynamic_registration = false
 
 [functions.embed]
 enabled = true
-verify_jwt = false
+verify_jwt = true
 
 [edge_runtime]
 enabled = true

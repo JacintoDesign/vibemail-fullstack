@@ -113,6 +113,19 @@ describe('digestFromMessages', () => {
     expect(args?.context[0]?.from).toBe(retrieved.from)
   })
 
+  it('rewrites cited names to retrieved senders and drops unknown indices', async () => {
+    reason.mockResolvedValue({
+      text: 'Wired covered it [1] Wired, unlike [9] Stratechery.',
+      available: true,
+    })
+    const retrieved = msg({ from: 'TLDR <a@tldr.example>' })
+
+    const result = await digestFromMessages('the launch', [retrieved])
+    expect(result.unavailable).toBe(false)
+    expect(result.text).toBe('Wired covered it [1] TLDR, unlike.')
+    expect(result.text).not.toMatch(/Stratechery/)
+  })
+
   it('lists matching newsletters when the provider reports quota exhaustion', async () => {
     reason.mockResolvedValue({ text: null, available: false })
     const a = msg({ from: 'TLDR <a@tldr.example>', subject: 'Same launch' })

@@ -1,7 +1,10 @@
 import { reason } from '../reason'
 import type { Message } from '../types/message'
 import type { ReasonContextMessage } from '../types/reason'
+import { constrainCitedNames, newsletterName } from './citations'
 import { searchByMeaning } from './retrieve'
+
+export { newsletterName }
 
 /**
  * Wider than search (`MATCH_COUNT` = 8). Digest is breadth — every matching
@@ -70,7 +73,9 @@ export async function digestFromMessages(
     })
     if (!result.available) return { text: fallbackDigest(messages), unavailable: true }
     const text = result.text?.trim()
-    return { text: text ? text : fallbackDigest(messages), unavailable: !text }
+    if (!text) return { text: fallbackDigest(messages), unavailable: true }
+    const grounded = constrainCitedNames(text, messages)
+    return { text: grounded ? grounded : fallbackDigest(messages), unavailable: false }
   } catch {
     return { text: fallbackDigest(messages), unavailable: true }
   }
@@ -84,18 +89,6 @@ export function excerptOf(message: Message): string {
   const lastSpace = cut.lastIndexOf(' ')
   const clipped = (lastSpace > EXCERPT_CHARS * 0.6 ? cut.slice(0, lastSpace) : cut).trim()
   return `${clipped}…`
-}
-
-/** Display name from an RFC 2822 From header — the newsletter, not the address. */
-export function newsletterName(from: string): string {
-  const raw = from.trim()
-  const angled = raw.match(/^(.*?)<([^>]+)>$/)
-  if (angled) {
-    const name = angled[1].trim().replace(/^"|"$/g, '')
-    return name || angled[2].trim()
-  }
-  if (raw.includes('@')) return raw.split('@')[0] || raw
-  return raw || '(unknown)'
 }
 
 /**
